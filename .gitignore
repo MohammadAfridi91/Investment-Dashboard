@@ -1,0 +1,22 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+
+# Runtime-generated (uploaded as GitHub Actions artifacts, not committed)
+logs/
+data/errors/
+data/compliance/reports/
+
+# OS
+.DS_Store

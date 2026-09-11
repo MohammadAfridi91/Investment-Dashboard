@@ -1,0 +1,49 @@
+# .github/workflows/backfill.yml
+name: Historical Backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      sessions:
+        description: 'Number of trading sessions to backfill (default: 375)'
+        required: false
+        type: number
+        default: 375
+      start_date:
+        description: 'Start date (YYYY-MM-DD). Leave blank for auto.'
+        required: false
+        type: string
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run backfill
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BACKFILL_SESSIONS: ${{ inputs.sessions }}
+          BACKFILL_START_DATE: ${{ inputs.start_date }}
+        run: python scripts/backfill.py
+
+      - name: Upload backfill logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backfill-logs-${{ github.run_id }}
+          path: logs/
+          retention-days: 30

@@ -1,0 +1,12 @@
+# Known dependencies so far (plan Sections 2.3 and 3.3).
+# This list is INCOMPLETE: ingestion, indicator, and filter modules
+# (Sections 6-8, not yet received) will add packages for data pulls,
+# technical indicators, etc. Do not treat this as final.
+#
+# Note: heartbeat.yml intentionally installs its own minimal set
+# (supabase, psycopg2-binary, python-dotenv) directly, rather than
+# via this file, per the plan's "Install minimal dependencies" step.
+
+supabase
+psycopg2-binary
+python-dotenv

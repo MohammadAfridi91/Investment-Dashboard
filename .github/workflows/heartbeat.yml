@@ -1,0 +1,33 @@
+# .github/workflows/heartbeat.yml
+name: Pipeline Heartbeat
+
+on:
+  schedule:
+    # 20:00 IST, Monday–Friday. `timezone` is set, so cron is read as
+    # local IST time directly (NOT the UTC-converted value).
+    - cron: '0 20 * * 1-5'
+      timezone: 'Asia/Kolkata'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install minimal dependencies
+        run: pip install supabase psycopg2-binary python-dotenv
+
+      - name: Check last EOD run
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/heartbeat_check.py

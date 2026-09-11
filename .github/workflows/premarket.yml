@@ -1,0 +1,49 @@
+# .github/workflows/premarket.yml
+name: Pre-Market Refresh
+
+on:
+  schedule:
+    # 08:45 IST, Monday–Friday. `timezone` is set, so cron is read as
+    # local IST time directly (NOT the UTC-converted value).
+    - cron: '45 8 * * 1-5'
+      timezone: 'Asia/Kolkata'
+  workflow_dispatch:
+
+concurrency:
+  group: premarket-refresh
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pre-market refresh
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python run_daily_pipeline.py --mode premarket
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: premarket-logs-${{ github.run_id }}
+          path: logs/
+          retention-days: 30
