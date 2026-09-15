@@ -50,14 +50,17 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           if [ -z "$SUPABASE_URL" ]; then echo "SUPABASE_URL missing"; exit 1; fi
           if [ -z "$SUPABASE_SERVICE_KEY" ]; then echo "SUPABASE_SERVICE_KEY missing"; exit 1; fi
+          if [ -z "$SUPABASE_DB_URL" ]; then echo "SUPABASE_DB_URL missing"; exit 1; fi
 
       - name: Run EOD pipeline
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           TARGET_DATE: ${{ inputs.target_date }}
           SKIP_INGESTION: ${{ inputs.skip_ingestion }}
         run: python run_daily_pipeline.py --mode eod

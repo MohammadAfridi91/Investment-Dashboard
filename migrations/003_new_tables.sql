@@ -1,0 +1,4 @@
+-- 003_new_tables.sql
+-- RESERVED — no-op placeholder.
+-- All new tables are in 001. Use 007+ for future new tables.
+SELECT 1;
