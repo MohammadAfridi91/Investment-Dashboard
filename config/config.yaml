@@ -1,0 +1,170 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# DALAL STREET ENGINE v6.5 — CONFIGURATION
+# Nested structure per pre-flight D1. Flat access is not supported.
+# ═══════════════════════════════════════════════════════════════════════════
+
+portfolio_capital: 5000000              # ₹50 Lakh
+
+card1:
+  adtv_min_inr: 150000000               # ₹15 Cr
+  mwpl_max_pct: 82.0
+  pcr_band: [0.60, 1.25]
+  delivery_value_percentile_min: 80
+  atr_compression_ratio: 0.80
+  rs_lookback_days: 20
+  rr_min: 2.50
+  score_min_risk_on: 8
+  score_min_neutral: 9
+  score_min_risk_off: 99                # Named constant: RISK_OFF_SCORE_THRESHOLD
+  oi_buildup_min_pct: 5.0
+  active_confirmations_required: 2
+  gap_atr_multiplier_max: 1.5
+  pcr_rising_required: true
+  coc_requires_price_oi: true
+  price_min: 20.0
+
+card1_active_confirmations:
+  - rollover_pct_above_20d_avg
+  - basis_pct_positive_and_rising
+  - iv_skew_under_3pct
+  - max_pain_above_spot
+
+card2:
+  tier1_min: 42
+  tier2_min: 34
+  roic_wacc_spread_min: 0.05
+  roce_wacc_spread_min: 0.05
+  roiic_min: 0.20
+  fcf_positive_years_min: 4
+  gm_decline_tolerance: 0.02
+  nd_ebitda_max: 1.0
+  interest_coverage_min: 4.0
+  altman_z_min: 2.6                     # v6.5 correction C-3
+  piotroski_f_min: 7
+  sloan_accrual_max: 0.10
+  cfo_pat_min: 0.80
+  esop_dilution_max: 0.02
+  cwip_max_card2: 0.30
+  pledge_max_card2: 0.05
+  obs_max: 0.15
+  dscr_min: 1.2
+  adtv_min_inr: 1000000000
+  market_cap_min_inr: 100000000000
+  promoter_holding_decline_max: 0.02
+
+fatal:
+  pledge_max_pct: 20.0
+  cwip_max_pct: 0.50
+  cwip_consecutive_years: 3
+  royalty_max_pct_of_revenue: 0.02
+  asm_min_stage_kill: 2
+  gsm_min_stage_kill: 1
+
+wacc:
+  erp: 0.055
+  beta_band: [0.70, 1.60]
+  beta_lookback_years: 2
+  beta_benchmark: "NIFTY 500"
+  kd_zero_debt_fallback_spread: 0.01
+  kd_zero_debt_tax_rate: 0.25
+
+dcf:
+  years: 10
+  g_term: 0.05
+  brent_tol: 1e-5
+  brent_bounds: [-0.20, 0.50]
+
+sector_tam_growth:
+  IT Services: 0.12
+  Pharmaceuticals: 0.11
+  Auto & Auto Components: 0.12
+  Capital Goods: 0.14
+  Chemicals: 0.11
+  Consumer Durables: 0.13
+  Consumer Staples: 0.09
+  Building Materials: 0.14
+  Metals & Mining: 0.07
+  Oil & Gas: 0.06
+  Power: 0.08
+  Real Estate: 0.15
+  Telecom: 0.10
+  Textiles: 0.08
+  Healthcare Services: 0.14
+  Defence & Aerospace: 0.18
+  Railways & Infra: 0.16
+  Default: 0.14
+
+tier1_auditors:
+  - "Deloitte Haskins & Sells"
+  - "S.R. Batliboi"
+  - "SRBC & Co"
+  - "BSR & Co"
+  - "BSR & Associates"
+  - "Price Waterhouse Chartered Accountants"
+  - "Walker Chandiok & Co"
+  - "Sharp & Tannan"
+  - "Singhi & Co"
+  - "Haribhakti & Co"
+  - "Kalyaniwalla & Mistry"
+  - "G.M. Kapadia & Co"
+  - "Lodha & Co"
+
+institutional_regex:
+  amc: "MUTUAL FUND|MF|AMC|ASSET MANAGEMENT|SBI|HDFC|ICICI PRUDENTIAL|NIPPON|KOTAK|AXIS|UTI|MIRAE|TATA|BANDHAN|DSP|MOTILAL|SUNDARAM"
+  insurance: "LIFE INSURANCE|LIC|GENERAL INSURANCE|GIC|PENSION"
+  fii: "FII|FPI|GOVERNMENT OF SINGAPORE|NORGES|VANGUARD|BLACKROCK|FIDELITY|MORGAN STANLEY|GOLDMAN SACHS|NOMURA|SOCIETE GENERALE|BNP PARIBAS|ABU DHABI"
+
+wash_trade:
+  qty_match_pct: 0.10
+  min_value_inr: 10000000
+
+market_regime:
+  vix_risk_off: 20.0
+  breadth_risk_off: 0.40
+  vix_risk_on: 15.0
+  breadth_risk_on: 0.60
+  india_vix_source: "nse_ind_close_all"
+  fii_dii_source: "nse_fiidii_trading_activity"
+
+sector_rs:
+  mapping_file: "config/industry_mappings.json"
+  fallback: "NIFTY 500"
+
+pit:
+  mode: "hybrid"
+  backfill_years: 3
+  price_backfill_sessions: 375
+
+compliance:
+  sebi_ra_registered: true
+  report_retention_years: 5
+  immutable_archive_dir: "data/compliance/reports"
+  no_guaranteed_return_language: true
+  upsi_logging: true
+
+vendor_license:
+  mode: "sebi_ra_personal"
+  redistribution_allowed: false
+
+ingestion:
+  request_delay_nse_archives_ms: 500
+  request_delay_nse_api_ms: 500
+  request_delay_bse_api_ms: 500
+  request_delay_screener_ms: 1000
+  retry_attempts: 3
+  retry_backoff_seconds: [2, 4, 8]
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  screener_robots_check: true
+
+governance_fatal:
+  - CFO_RESIGN
+  - CS_RESIGN
+  - SECRETARIAL_QUAL
+  - GST_RAID
+  - IT_RAID
+  - ED_RAID
+  - PROMOTER_PLEDGE_INVOCATION
+  - CREDIT_DOWNGRADE_SEVERE
+
+nse_holidays_file: "config/nse_holidays.json"
+industry_mappings_file: "config/industry_mappings.json"
