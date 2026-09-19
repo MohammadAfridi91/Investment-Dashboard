@@ -8,13 +8,18 @@ class ValidationError(Exception):
 
 def validate_ohlc(row: dict[str, Any]) -> list[str]:
     errs = []
-    o, h, l, c = (row['open_price'], row['high_price'],
-                  row['low_price'], row['close_price'])
-    if not (l <= o <= h): errs.append('open outside [low, high]')
-    if not (l <= c <= h): errs.append('close outside [low, high]')
-    if row['volume'] < 0: errs.append('negative volume')
-    if row['delivery_qty'] > row['volume']: errs.append('delivery > volume')
-    if row['prev_close'] <= 0: errs.append('non-positive prev_close')
+    o, h, lo, c = (row['open_price'], row['high_price'],
+                   row['low_price'], row['close_price'])
+    if not (lo <= o <= h):
+        errs.append('open outside [low, high]')
+    if not (lo <= c <= h):
+        errs.append('close outside [low, high]')
+    if row['volume'] < 0:
+        errs.append('negative volume')
+    if row['delivery_qty'] > row['volume']:
+        errs.append('delivery > volume')
+    if row['prev_close'] <= 0:
+        errs.append('non-positive prev_close')
     return errs
 
 
