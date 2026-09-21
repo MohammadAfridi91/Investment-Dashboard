@@ -1,22 +1,31 @@
-# Environment / secrets
+# Environment
 .env
-.env.*
-!.env.example
+.env.local
+*.env
 
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.egg-info/
-.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .venv/
 venv/
-env/
+coverage.xml
+.coverage
 
-# Runtime-generated (uploaded as GitHub Actions artifacts, not committed)
-logs/
+# Data
+data/cache/
 data/errors/
 data/compliance/reports/
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
 
 # OS
 .DS_Store
+Thumbs.db

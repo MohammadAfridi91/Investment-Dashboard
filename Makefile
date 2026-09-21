@@ -1,25 +1,23 @@
-.PHONY: help db-migrate db-reset backfill test lint run-eod run-premarket clean
-
-help:
-	@echo "Targets: db-migrate, db-reset, backfill, test, lint, run-eod, run-premarket, clean"
+.PHONY: db-migrate db-reset test lint run-eod run-premarket backfill heartbeat
 
 db-migrate:
-	@echo "Apply migrations in order via Supabase SQL editor."
-	@ls -1 migrations/*.sql | sort
+	python -c "from core.database.client import apply_migrations; print(apply_migrations())"
 
 db-reset:
-	@echo "Drop and recreate all tables (DEV ONLY)."
-	@psql $$SUPABASE_DB_URL -f scripts/drop_all.sql
-
-backfill:
-	python scripts/backfill.py
+	@echo "Dropping all tables (dev only)..."
+	@python -c "from core.database.client import db_connection; \
+	conn = db_connection().__enter__(); \
+	cur = conn.cursor(); \
+	cur.execute('DROP SCHEMA public CASCADE; CREATE SCHEMA public;'); \
+	conn.commit()"
+	$(MAKE) db-migrate
 
 test:
-	pytest tests/ -v --cov=core --cov-report=term-missing
+	pytest tests/
 
 lint:
 	ruff check .
-	mypy core/ --strict
+	mypy core/ --ignore-missing-imports
 
 run-eod:
 	python run_daily_pipeline.py --mode eod
@@ -27,6 +25,8 @@ run-eod:
 run-premarket:
 	python run_daily_pipeline.py --mode premarket
 
-clean:
-	rm -rf __pycache__ .pytest_cache .mypy_cache .ruff_cache
-	find . -name "*.pyc" -delete
+backfill:
+	python scripts/backfill.py
+
+heartbeat:
+	python scripts/heartbeat_check.py

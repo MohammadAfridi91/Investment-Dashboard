@@ -1,15 +1,38 @@
+from __future__ import annotations
+
+import logging
+import sys
+from typing import Any
+
 import structlog
+from structlog.types import Processor
 
 
-def configure_logging(run_id: str, module: str) -> structlog.BoundLogger:
+def configure_logging(level: str = "INFO", run_id: str | None = None) -> None:
+    logging.basicConfig(
+        format="%(message)s",
+        stream=sys.stdout,
+        level=getattr(logging, level.upper(), logging.INFO),
+    )
+    processors: list[Processor] = [
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer(),
+    ]
     structlog.configure(
-        processors=[
-            structlog.contextvars.merge_contextvars,
-            structlog.processors.add_log_level,
-            structlog.processors.TimeStamper(fmt='iso', utc=True),
-            structlog.processors.JSONRenderer(),
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(20),  # INFO
+        processors=processors,
+        wrapper_class=structlog.make_filtering_bound_logger(
+            getattr(logging, level.upper(), logging.INFO)
+        ),
+        logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
-    return structlog.get_logger(module=module, run_id=run_id)
+    if run_id:
+        structlog.contextvars.bind_contextvars(run_id=run_id)
+
+
+def get_logger(name: str = "dalal") -> Any:
+    return structlog.get_logger(name)

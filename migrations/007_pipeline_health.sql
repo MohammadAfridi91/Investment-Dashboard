@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 007_pipeline_health.sql
--- Monitoring table for pipeline heartbeat
+-- Monitoring table for pipeline heartbeat (v6.5 addition)
 -- ═══════════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS pipeline_health (
@@ -29,6 +29,4 @@ ALTER TABLE governance_events        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pipeline_health          ENABLE ROW LEVEL SECURITY;
 
 -- No policies defined. Service-role key bypasses RLS.
--- Anon key blocked by default (no policy = no access) — true here because
--- RLS is ON. See 008 for why that reasoning does NOT extend to tables
--- where RLS is left off entirely.
+-- Anon key blocked by default (no policy = no access).

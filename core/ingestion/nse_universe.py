@@ -1,112 +1,132 @@
-"""
-core/ingestion/nse_universe.py  (Source: N8, N9, N10)
+from __future__ import annotations
 
-Fetches the three constituent lists and unions them into `universe`.
-
-Domain fix: the plan's URLs use archives.nseindia.com, which NSE migrated
-away from. The live path is nsearchives.nseindia.com (same file layout).
-
-fetch() pulls all three CSVs and joins them with a boundary marker so the
-whole run gets a single reproducible checksum (any of the three sources
-changing changes the checksum); parse() splits back apart on that marker.
-"""
+import io
+import re
 from datetime import date
 from typing import Any
 
-from core.filters.non_bfsi_mask import is_bfsi
-from core.ingestion.base import Ingestor
-from core.utils.http import fetch as http_fetch
-from core.utils.http import get_session
+import pandas as pd
 
-BASE_URL = "https://nsearchives.nseindia.com/content/indices"
+from core.database.client import DB
+from core.ingestion.base import Ingestor, IngestResult
+from core.utils.checksums import sha256_bytes
+from core.utils.logging import get_logger
+from core.utils.normalization import strip_column_names
 
-CONSTITUENT_FILES = {
-    "ind_nifty500list.csv": "is_nifty500",
-    "ind_niftymidcap150list.csv": "is_midsmall400",
-    "ind_niftysmallcap250list.csv": "is_midsmall400",
+log = get_logger("ingest.universe")
+
+NIFTY500_URL = "https://archives.nseindia.com/content/indices/ind_nifty500list.csv"
+MIDCAP150_URL = "https://archives.nseindia.com/content/indices/ind_niftymidcap150list.csv"
+SMALLCAP250_URL = "https://archives.nseindia.com/content/indices/ind_niftysmallcap250list.csv"
+
+BFSI_INDUSTRY_EXACT = {
+    "Banks",
+    "Financial Technology (Fintech)",
+    "Finance",
+    "Insurance",
+    "Asset Management Company",
+    "Investment Company",
+    "Housing Finance",
+    "Other Financial Services",
+    "Financial Services",
+    "Private Sector Bank",
+    "Public Sector Bank",
+    "Non Banking Financial Company (NBFC)",
+    "Housing Finance Company",
+    "Life Insurance",
+    "General Insurance",
+    "Financial Institution",
+    "Broking & Allied Services",
 }
+BFSI_REGEX = re.compile(
+    r"(Bank|Finance|Financial|Insurance|Asset Management|Housing Fin|"
+    r"Investment|Broking|Capital Market)",
+    re.IGNORECASE,
+)
 
-_BOUNDARY = b"\n===NSE_FILE_BOUNDARY===\n"
+
+def is_bfsi(industry: str | None, sector: str | None) -> bool:
+    for val in (industry or "", sector or ""):
+        if val in BFSI_INDUSTRY_EXACT:
+            return True
+        if BFSI_REGEX.search(val):
+            return True
+    return False
 
 
 class NSEUniverseIngestor(Ingestor):
     SOURCE = "nse_universe"
-    SCHEDULE = "weekly (Monday 08:00 IST); Week 1: on-demand via CLI"
+    SCHEDULE = "WEEKLY"
 
-    def fetch(self, target_date: date) -> bytes:
-        session = get_session()
-        blobs = []
-        for filename in CONSTITUENT_FILES:
-            url = f"{BASE_URL}/{filename}"
-            content = http_fetch(session, url, delay_ms=500)
-            blobs.append(filename.encode() + b"\n" + content)
-        return _BOUNDARY.join(blobs)
+    def __init__(self, http: Any, db: DB, config: Any) -> None:
+        self.http = http
+        self.db = db
+        self.config = config
 
-    def parse(self, raw: bytes, target_date: date) -> list[dict[str, Any]]:
-        import csv
-        import io
+    def _fetch_csv(self, url: str) -> pd.DataFrame:
+        raw = self.http.get(url)
+        df = pd.read_csv(io.BytesIO(raw))
+        df.columns = strip_column_names(list(df.columns))
+        return df
 
+    def fetch_all(self) -> dict[str, dict[str, Any]]:
+        frames = {
+            "n500": self._fetch_csv(NIFTY500_URL),
+            "mid150": self._fetch_csv(MIDCAP150_URL),
+            "small250": self._fetch_csv(SMALLCAP250_URL),
+        }
         merged: dict[str, dict[str, Any]] = {}
+        for key, df in frames.items():
+            for _, r in df.iterrows():
+                sym = str(r["Symbol"]).strip()
+                entry = merged.setdefault(
+                    sym,
+                    {
+                        "symbol": sym,
+                        "company_name": str(r["Company Name"]).strip(),
+                        "isin": str(r["ISIN Code"]).strip(),
+                        "sector": None,
+                        "industry": str(r.get("Industry", "")).strip(),
+                        "is_bfsi": False,
+                        "is_fno": False,
+                        "is_nifty500": False,
+                        "is_midsmall400": False,
+                    },
+                )
+                if key == "n500":
+                    entry["is_nifty500"] = True
+                elif key in ("mid150", "small250"):
+                    entry["is_midsmall400"] = True
+        return merged
 
-        for blob in raw.split(_BOUNDARY):
-            filename, _, csv_bytes = blob.partition(b"\n")
-            filename = filename.decode().strip()
-            flag_field = CONSTITUENT_FILES[filename]
+    def run(self, target_date: date) -> IngestResult:
+        try:
+            merged = self.fetch_all()
+        except Exception as e:
+            log.error("universe_fetch_failed", error=str(e))
+            return IngestResult(self.SOURCE, status="FAILED", error=str(e))
 
-            text = csv_bytes.decode("utf-8-sig")
-            reader = csv.DictReader(io.StringIO(text))
-            for row in reader:
-                symbol = (row.get("Symbol") or "").strip()
-                if not symbol:
-                    continue
-                industry = (row.get("Industry") or "").strip()
-                # NSE's constituent CSVs don't carry a separate "Sector"
-                # column distinct from Industry -- Industry is the only
-                # classification field available here, so is_bfsi() gets
-                # it twice (matches the function's (industry, sector)
-                # signature without inventing a sector value).
-                entry = merged.setdefault(symbol, {
-                    "symbol": symbol,
-                    "company_name": (row.get("Company Name") or "").strip(),
-                    "isin": (row.get("ISIN Code") or "").strip(),
-                    "sector": industry,
-                    "industry": industry,
-                    "is_nifty500": False,
-                    "is_midsmall400": False,
-                    "is_fno": False,
-                })
-                entry[flag_field] = True
-                # Keep the most complete name/ISIN if a later file has gaps
-                if not entry["company_name"] and row.get("Company Name"):
-                    entry["company_name"] = row["Company Name"].strip()
-                if not entry["isin"] and row.get("ISIN Code"):
-                    entry["isin"] = row["ISIN Code"].strip()
-
-        rows = list(merged.values())
+        all_rows = list(merged.values())
+        # Enforce Non-BFSI hard exclusion (AC4): discard BFSI stocks before writing to universe
+        rows = [r for r in all_rows if not is_bfsi(r.get("industry"), r.get("sector"))]
         for r in rows:
-            r["is_bfsi"] = is_bfsi(r["industry"], r["sector"])
-        return rows
+            r["is_bfsi"] = False
 
-    def validate(
-        self, rows: list[dict[str, Any]]
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        valid, rejected = [], []
-        for r in rows:
-            errs = []
-            if not r.get("symbol"):
-                errs.append("missing symbol")
-            if not r.get("isin") or len(r["isin"]) != 12:
-                errs.append(f"malformed ISIN: {r.get('isin')!r}")
-            if not r.get("company_name"):
-                errs.append("missing company_name")
-            if errs:
-                rejected.append({**r, "_validation_errors": errs})
-            else:
-                valid.append(r)
-        return valid, rejected
+        try:
+            n = self.db.upsert("universe", rows, on_conflict="symbol")
+        except Exception as e:
+            log.error("universe_upsert_failed", error=str(e))
+            return IngestResult(self.SOURCE, status="FAILED", error=str(e))
 
-    def upsert(self, rows: list[dict[str, Any]]) -> int:
-        from core.database.client import get_client
-
-        client = get_client()
-        return client.bulk_upsert("universe", rows, conflict_cols=["symbol"])
+        log.info("universe_done", total=len(rows), upserted=n, excluded_bfsi=len(all_rows) - len(rows))
+        return IngestResult(
+            self.SOURCE,
+            status="SUCCESS",
+            target_date=target_date,
+            rows_fetched=len(all_rows),
+            rows_valid=len(rows),
+            rows_rejected=len(all_rows) - len(rows),
+            rows_upserted=n,
+            rows_written=n,
+            checksum=sha256_bytes(str(sorted(merged.keys())).encode()),
+        )

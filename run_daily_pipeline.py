@@ -1,164 +1,191 @@
-#!/usr/bin/env python3
-"""
-run_daily_pipeline.py
+from __future__ import annotations
 
-Week 1 scope: wires the ingestors together and records every run to
-pipeline_health.
-
---mode eod       Runs nse_bhavcopy + nse_index_prices for TARGET_DATE
-                 (today's session, meant to run after market close --
-                 both files become available around the same time).
---mode premarket No Week-1-scoped ingestion belongs here yet:
-                 nse_universe.py is explicitly "on-demand via CLI" in the
-                 plan (not a daily automated job), and surveillance /
-                 corporate-action ingestion -- this slot's original
-                 intent per the repo's own README -- is Week 2 scope.
-                 Logs that plainly and exits 0 rather than inventing
-                 work to fill the slot.
-
-Env vars (matching what the workflows pass):
-  TARGET_DATE      YYYY-MM-DD, optional. Defaults to today.
-  SKIP_INGESTION   "true"/"false", optional. Default false.
-"""
 import argparse
 import os
 import sys
-import traceback
 import uuid
 from datetime import UTC, date, datetime
-from pathlib import Path
 
-from core.ingestion.base import Ingestor
+from core.config import Config, load_config
+from core.database.client import DB
+from core.ingestion.corporate_actions import CorporateActionsIngestor
+from core.ingestion.gsec_yield import GSecYieldIngestor
 from core.ingestion.nse_bhavcopy import NSEBhavcopyIngestor
+from core.ingestion.nse_derivatives import NSEDerivativesIngestor
 from core.ingestion.nse_index_prices import NSEIndexPricesIngestor
-from core.utils.logging import configure_logging
-from core.utils.trading_calendar import is_trading_day, load_holidays
+from core.ingestion.nse_institutional import NSEInstitutionalIngestor
+from core.ingestion.nse_market_flow import NSEMarketFlowIngestor
+from core.ingestion.nse_surveillance import NSESurveillanceIngestor
+from core.ingestion.nse_universe import NSEUniverseIngestor
+from core.utils.http import NSEHttpClient, PlainHttpClient
+from core.utils.logging import configure_logging, get_logger
+from core.utils.trading_calendar import is_trading_day
 
-HOLIDAYS_PATH = "config/nse_holidays.json"
-
-
-def parse_target_date() -> date:
-    raw = os.environ.get("TARGET_DATE", "").strip()
-    return date.fromisoformat(raw) if raw else date.today()
-
-
-def env_flag(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() == "true"
+log = get_logger("pipeline")
 
 
-def run_ingestor(ingestor: Ingestor, target_date: date, logger) -> tuple[int, list[str]]:
-    logger.info("ingestor_start", source=ingestor.SOURCE)
-    result = ingestor.run(target_date)
-    logger.info(
-        "ingestor_done",
-        source=ingestor.SOURCE,
-        rows_fetched=result.rows_fetched,
-        rows_valid=result.rows_valid,
-        rows_rejected=result.rows_rejected,
-        rows_written=result.rows_written,
-        duration_ms=result.duration_ms,
-        errors=result.errors,
-    )
-    return result.rows_written, [f"{ingestor.SOURCE}: {e}" for e in result.errors]
-
-
-def write_health(
-    workflow: str, run_id: uuid.UUID, started_at: datetime,
-    status: str, rows_processed: int, error_message: str | None,
+def _record_health(
+    db: DB,
+    run_id: str,
+    workflow: str,
+    status: str,
+    started: datetime,
+    finished: datetime | None,
+    rows: int,
+    error: str | None,
 ) -> None:
-    from core.database.client import get_client
+    dur = int((finished - started).total_seconds()) if finished else None
+    db.upsert(
+        "pipeline_health",
+        [
+            {
+                "run_id": run_id,
+                "workflow": workflow,
+                "status": status,
+                "started_at": started.isoformat(),
+                "finished_at": finished.isoformat() if finished else None,
+                "duration_seconds": dur,
+                "rows_processed": rows,
+                "error_message": error,
+            }
+        ],
+        on_conflict="run_id",
+    )
 
-    finished_at = datetime.now(UTC)
-    client = get_client()
-    client.bulk_upsert("pipeline_health", [{
-        "id": str(uuid.uuid4()),  # bulk_upsert needs a conflict target;
-                                  # a fresh id per write makes this a
-                                  # plain insert in practice
-        "run_id": str(run_id),
-        "workflow": workflow,
-        "status": status,
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "duration_seconds": int((finished_at - started_at).total_seconds()),
-        "rows_processed": rows_processed,
-        "error_message": (error_message or None),
-    }], conflict_cols=["id"])
+
+def run_eod(cfg: Config, db: DB, target_date: date, skip_ingestion: bool) -> int:
+    total_rows = 0
+    universe_count = len(db.select("universe", columns="symbol", limit=1))
+    if not skip_ingestion and (target_date.weekday() == 0 or universe_count == 0):
+        uni = NSEUniverseIngestor(
+            PlainHttpClient(
+                cfg.ingestion.user_agent,
+                cfg.ingestion.request_delay_nse_archives_ms,
+            ),
+            db,
+            cfg,
+        )
+        res = uni.run(target_date)
+        log.info("universe_result", status=res.status, rows=res.rows_upserted)
+        total_rows += res.rows_upserted
+
+    if skip_ingestion:
+        log.info("eod_skip_ingestion")
+        return total_rows
+
+    nse = NSEHttpClient(
+        cfg.ingestion.user_agent,
+        cfg.ingestion.request_delay_nse_archives_ms,
+    )
+    plain = PlainHttpClient(
+        cfg.ingestion.user_agent,
+        cfg.ingestion.request_delay_nse_archives_ms,
+    )
+
+    bc = NSEBhavcopyIngestor(nse, db, cfg).run(target_date)
+    log.info("bhavcopy_result", status=bc.status, rows=bc.rows_upserted, error=bc.error)
+    total_rows += bc.rows_upserted
+
+    ip = NSEIndexPricesIngestor(nse, db, cfg).run(target_date)
+    log.info("index_result", status=ip.status, rows=ip.rows_upserted, error=ip.error)
+    total_rows += ip.rows_upserted
+
+    deriv = NSEDerivativesIngestor(nse, db, cfg).run(target_date)
+    log.info("derivatives_result", status=deriv.status, rows=deriv.rows_upserted, error=deriv.error)
+    total_rows += deriv.rows_upserted
+
+    surv = NSESurveillanceIngestor(plain, db, cfg).run(target_date)
+    log.info("surveillance_result", status=surv.status, rows=surv.rows_upserted, error=surv.error)
+    total_rows += surv.rows_upserted
+
+    inst = NSEInstitutionalIngestor(plain, db, cfg).run(target_date)
+    log.info("institutional_result", status=inst.status, rows=inst.rows_upserted, error=inst.error)
+    total_rows += inst.rows_upserted
+
+    flow = NSEMarketFlowIngestor(plain, db, cfg).run(target_date)
+    log.info("market_flow_result", status=flow.status, rows=flow.rows_upserted, error=flow.error)
+    total_rows += flow.rows_upserted
+
+    actions = CorporateActionsIngestor(plain, db, cfg).run(target_date)
+    log.info("actions_result", status=actions.status, rows=actions.rows_upserted, error=actions.error)
+    total_rows += actions.rows_upserted
+
+    gsec = GSecYieldIngestor(plain, db, cfg).run(target_date)
+    log.info("gsec_result", status=gsec.status, rows=gsec.rows_upserted, error=gsec.error)
+    total_rows += gsec.rows_upserted
+
+    return total_rows
 
 
-def write_log_summary(mode: str, run_id: uuid.UUID, status: str, rows: int, errors: list[str]) -> None:
-    """eod_pipeline.yml's 'Upload logs' step expects logs/ to have
-    something in it; structlog's JSON stream already goes to stdout
-    (captured in the job's own log regardless), this is just a
-    convenient downloadable summary alongside it."""
-    Path("logs").mkdir(exist_ok=True)
-    path = Path("logs") / f"{mode}_{run_id}.log"
-    lines = [
-        f"mode={mode} run_id={run_id} status={status} rows_processed={rows}",
-        *errors,
-    ]
-    path.write_text("\n".join(lines) + "\n")
+def run_premarket(cfg: Config, db: DB, target_date: date) -> int:
+    plain = PlainHttpClient(
+        cfg.ingestion.user_agent,
+        cfg.ingestion.request_delay_nse_archives_ms,
+    )
+    surv = NSESurveillanceIngestor(plain, db, cfg).run(target_date)
+    log.info("premarket_surveillance_result", status=surv.status, rows=surv.rows_upserted, error=surv.error)
+    return surv.rows_upserted
+
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", required=True, choices=["eod", "premarket"])
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mode", choices=["eod", "premarket"], required=True)
+    ap.add_argument("--config", default="config/config.yaml")
+    ap.add_argument("--date", default=None)
+    ap.add_argument("--skip-ingestion", action="store_true")
+    args = ap.parse_args()
 
-    target_date = parse_target_date()
-    skip_ingestion = env_flag("SKIP_INGESTION")
-    run_id = uuid.uuid4()
-    started_at = datetime.now(UTC)
+    run_id = str(uuid.uuid4())
+    configure_logging(run_id=run_id)
+    cfg = load_config(args.config)
 
-    logger = configure_logging(run_id=str(run_id), module="run_daily_pipeline")
-    logger.info("pipeline_start", mode=args.mode, target_date=str(target_date),
-                skip_ingestion=skip_ingestion)
+    date_str = args.date or os.environ.get("TARGET_DATE")
+    target_date = date.fromisoformat(date_str) if date_str else datetime.now(UTC).date()
+    skip_ingestion = args.skip_ingestion or os.environ.get("SKIP_INGESTION", "").lower() in ("true", "1")
 
-    holidays = load_holidays(HOLIDAYS_PATH)
-    if not is_trading_day(target_date, holidays):
-        logger.warning("not_a_trading_day", target_date=str(target_date))
-        write_health(args.mode, run_id, started_at, "SUCCESS", 0,
-                     f"{target_date} is not a trading day; nothing to do")
-        write_log_summary(args.mode, run_id, "SUCCESS", 0,
-                          [f"{target_date} is not a trading day"])
+    log.info(
+        "pipeline_start",
+        mode=args.mode,
+        run_id=run_id,
+        target_date=str(target_date),
+        skip_ingestion=skip_ingestion,
+    )
+
+    db = DB()
+    started = datetime.now(UTC)
+    status = "SUCCESS"
+    err: str | None = None
+    rows = 0
+
+    if not is_trading_day(target_date, [h.date for h in cfg.nse_holidays]):
+        log.info("non_trading_day_skip", date=str(target_date))
+        _record_health(
+            db,
+            run_id,
+            args.mode,
+            "SKIPPED",
+            started,
+            datetime.now(UTC),
+            0,
+            "non-trading day",
+        )
         return 0
 
-    total_rows = 0
-    errors: list[str] = []
-    status = "SUCCESS"
-
     try:
-        if skip_ingestion:
-            logger.info("skip_ingestion_set", mode=args.mode)
-        elif args.mode == "eod":
-            for ingestor in (NSEBhavcopyIngestor(), NSEIndexPricesIngestor()):
-                rows, ing_errors = run_ingestor(ingestor, target_date, logger)
-                total_rows += rows
-                errors.extend(ing_errors)
-        elif args.mode == "premarket":
-            logger.info(
-                "premarket_noop",
-                note="No Week 1 premarket-scoped ingestion: nse_universe.py "
-                     "is on-demand via CLI per the plan, and surveillance/"
-                     "corporate-action ingestion is Week 2.",
-            )
-    except Exception:
+        if args.mode == "eod":
+            rows = run_eod(cfg, db, target_date, skip_ingestion)
+        else:
+            rows = run_premarket(cfg, db, target_date)
+    except Exception as e:
+        log.exception("pipeline_failed")
         status = "FAILED"
-        tb = traceback.format_exc()
-        errors.append(tb)
-        logger.error("pipeline_exception", traceback=tb)
+        err = str(e)
 
-    if status == "SUCCESS" and total_rows == 0 and errors:
-        # every ingestor that ran produced zero rows AND reported errors --
-        # a genuinely empty EOD run is worth flagging loudly, distinct from
-        # "some rows were rejected but most wrote fine"
-        status = "FAILED"
-
-    error_message = "; ".join(errors)[:5000] if errors else None
-    write_health(args.mode, run_id, started_at, status, total_rows, error_message)
-    write_log_summary(args.mode, run_id, status, total_rows, errors)
-
-    logger.info("pipeline_done", status=status, total_rows=total_rows)
-    return 0 if status != "FAILED" else 1
+    finished = datetime.now(UTC)
+    _record_health(db, run_id, args.mode, status, started, finished, rows, err)
+    log.info("pipeline_end", status=status, rows=rows)
+    return 0 if status == "SUCCESS" else 1
 
 
 if __name__ == "__main__":

@@ -1,22 +1,16 @@
-# .github/workflows/eod_pipeline.yml
 name: EOD Pipeline
 
 on:
   schedule:
-    # 18:45 IST, Monday–Friday. `timezone` is set, so cron is read as
-    # local IST time directly (NOT the UTC-converted value) — confirmed
-    # against GitHub's own docs example, which uses local-time numbers
-    # alongside `timezone`.
-    - cron: '45 18 * * 1-5'
-      timezone: 'Asia/Kolkata'
+    - cron: '15 13 * * 1-5'
   workflow_dispatch:
     inputs:
       target_date:
-        description: 'Target date (YYYY-MM-DD). Leave blank for today.'
+        description: 'Target date (YYYY-MM-DD). Blank = today.'
         required: false
         type: string
       skip_ingestion:
-        description: 'Skip data ingestion, only run engines'
+        description: 'Skip ingestion, only run engines'
         required: false
         type: boolean
         default: false
@@ -32,53 +26,32 @@ jobs:
   run-eod:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Verify secrets
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          if [ -z "$SUPABASE_URL" ]; then echo "SUPABASE_URL missing"; exit 1; fi
-          if [ -z "$SUPABASE_SERVICE_KEY" ]; then echo "SUPABASE_SERVICE_KEY missing"; exit 1; fi
-          if [ -z "$SUPABASE_DB_URL" ]; then echo "SUPABASE_DB_URL missing"; exit 1; fi
-
+      - run: pip install -r requirements.txt
       - name: Run EOD pipeline
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          TARGET_DATE: ${{ inputs.target_date }}
-          SKIP_INGESTION: ${{ inputs.skip_ingestion }}
-        run: python run_daily_pipeline.py --mode eod
-
-      - name: Upload logs
+        run: |
+          ARGS="--mode eod"
+          if [ -n "${{ inputs.target_date }}" ]; then
+            ARGS="$ARGS --date ${{ inputs.target_date }}"
+          fi
+          if [ "${{ inputs.skip_ingestion }}" = "true" ]; then
+            ARGS="$ARGS --skip-ingestion"
+          fi
+          python run_daily_pipeline.py $ARGS
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
           name: eod-logs-${{ github.run_id }}
           path: |
             logs/
             data/errors/
           retention-days: 30
-
-      - name: Upload compliance reports
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: compliance-reports-${{ github.run_id }}
-          path: data/compliance/reports/
-          retention-days: 90
+          if-no-files-found: ignore

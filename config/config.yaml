@@ -154,6 +154,8 @@ ingestion:
   retry_attempts: 3
   retry_backoff_seconds: [2, 4, 8]
   user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  backfill_sessions: 375
+  high_52w_window_sessions: 252
   screener_robots_check: true
 
 governance_fatal:
@@ -166,5 +168,6 @@ governance_fatal:
   - PROMOTER_PLEDGE_INVOCATION
   - CREDIT_DOWNGRADE_SEVERE
 
+RISK_OFF_SCORE_THRESHOLD: 99
 nse_holidays_file: "config/nse_holidays.json"
 industry_mappings_file: "config/industry_mappings.json"

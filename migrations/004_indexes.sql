@@ -1,28 +1,18 @@
--- ═══════════════════════════════════════════════════════════════════════════
--- 004_indexes.sql
--- ═══════════════════════════════════════════════════════════════════════════
-
-CREATE INDEX IF NOT EXISTS idx_universe_bfsi       ON universe (is_bfsi);
-CREATE INDEX IF NOT EXISTS idx_universe_n500       ON universe (is_nifty500);
-CREATE INDEX IF NOT EXISTS idx_universe_midsmall   ON universe (is_midsmall400);
-CREATE INDEX IF NOT EXISTS idx_daily_prices_date   ON daily_prices (trade_date DESC);
+CREATE INDEX IF NOT EXISTS idx_universe_bfsi ON universe (is_bfsi);
+CREATE INDEX IF NOT EXISTS idx_universe_n500 ON universe (is_nifty500);
+CREATE INDEX IF NOT EXISTS idx_universe_midsmall ON universe (is_midsmall400);
+CREATE INDEX IF NOT EXISTS idx_daily_prices_date ON daily_prices (trade_date DESC);
 CREATE INDEX IF NOT EXISTS idx_sector_indices_date ON sector_indices (trade_date DESC);
-CREATE INDEX IF NOT EXISTS idx_corp_events_date    ON corporate_events (event_date);
-CREATE INDEX IF NOT EXISTS idx_corp_actions_symbol_exdate
-    ON corporate_actions (symbol, ex_date DESC);
-CREATE INDEX IF NOT EXISTS idx_finf_pit
-    ON forensic_financials (symbol, effective_date DESC, fiscal_year DESC);
-CREATE INDEX IF NOT EXISTS idx_finf_current
-    ON forensic_financials (symbol, fiscal_year DESC)
-    WHERE consolidated_flag = TRUE AND restatement_flag = FALSE;
-CREATE INDEX IF NOT EXISTS idx_inst_deals_date
-    ON institutional_deals (deal_date DESC);
-CREATE INDEX IF NOT EXISTS idx_inst_deals_normalized
-    ON institutional_deals (symbol, deal_date, normalized_client_name);
-CREATE INDEX IF NOT EXISTS idx_mkt_regime_date     ON market_regime (trade_date DESC);
-CREATE INDEX IF NOT EXISTS idx_gov_events_date     ON governance_events (event_date DESC);
-CREATE INDEX IF NOT EXISTS idx_trade_cards_symbol_date
-    ON trade_check_cards (symbol, eval_date DESC);
+CREATE INDEX IF NOT EXISTS idx_corp_events_date ON corporate_events (event_date);
+CREATE INDEX IF NOT EXISTS idx_corp_actions_symbol_exdate ON corporate_actions (symbol, ex_date DESC);
+CREATE INDEX IF NOT EXISTS idx_finf_pit ON forensic_financials (symbol, effective_date DESC, fiscal_year DESC);
+CREATE INDEX IF NOT EXISTS idx_finf_current ON forensic_financials (symbol, fiscal_year DESC) WHERE consolidated_flag = TRUE AND restatement_flag = FALSE;
+CREATE INDEX IF NOT EXISTS idx_inst_deals_date ON institutional_deals (deal_date DESC);
+CREATE INDEX IF NOT EXISTS idx_inst_deals_normalized ON institutional_deals (symbol, deal_date, normalized_client_name);
+CREATE INDEX IF NOT EXISTS idx_mkt_regime_date ON market_regime (trade_date DESC);
+CREATE INDEX IF NOT EXISTS idx_gov_events_date ON governance_events (event_date DESC);
+CREATE INDEX IF NOT EXISTS idx_trade_cards_symbol_date ON trade_check_cards (symbol, eval_date DESC);
 CREATE INDEX IF NOT EXISTS idx_trade_cards_verdict ON trade_check_cards (verdict);
 CREATE INDEX IF NOT EXISTS idx_trade_cards_details ON trade_check_cards USING GIN (card_details);
-CREATE INDEX IF NOT EXISTS idx_sebi_log_type_ts    ON sebi_compliance_log (event_type, event_ts DESC);
+CREATE INDEX IF NOT EXISTS idx_sebi_log_type_ts ON sebi_compliance_log (event_type, event_ts DESC);
+CREATE INDEX IF NOT EXISTS idx_pipeline_health_workflow_started ON pipeline_health (workflow, started_at DESC);
