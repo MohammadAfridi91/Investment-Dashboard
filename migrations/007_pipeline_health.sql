@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS pipeline_health (
     duration_seconds INT,
     rows_processed BIGINT,
     error_message TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_pipeline_health_run_id UNIQUE (run_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_pipeline_health_workflow_started
