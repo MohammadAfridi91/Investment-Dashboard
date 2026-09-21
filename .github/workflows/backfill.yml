@@ -35,6 +35,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           BACKFILL_SESSIONS: ${{ inputs.sessions }}
           BACKFILL_START_DATE: ${{ inputs.start_date }}
         run: python scripts/backfill.py
