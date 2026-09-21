@@ -77,26 +77,27 @@ class NSEIndexPricesIngestor(Ingestor):
                     vol = int(float(r[vol_col]))
                 except (TypeError, ValueError):
                     vol = None
-            if name in BENCHMARKS:
+            name_upper = name.upper()
+            if name_upper in BENCHMARKS:
                 benchmarks.append(
                     {
-                        "symbol": name,
+                        "symbol": name_upper,
                         "trade_date": target_date,
                         "close_price": close,
                         "volume": vol,
                         "raw_payload_checksum": checksum,
                     }
                 )
-            if name in SECTOR_INDICES:
+            if name_upper in SECTOR_INDICES:
                 sectors.append(
                     {
-                        "index_symbol": name,
+                        "index_symbol": name_upper,
                         "trade_date": target_date,
                         "close_price": close,
                         "raw_payload_checksum": checksum,
                     }
                 )
-            if name.upper() == VIX_KEY:
+            if name_upper == VIX_KEY:
                 vix_row = {"india_vix": close}
         return benchmarks, sectors, vix_row
 

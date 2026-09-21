@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import io
+import json
 import re
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -70,6 +72,24 @@ class NSEUniverseIngestor(Ingestor):
         return df
 
     def fetch_all(self) -> dict[str, dict[str, Any]]:
+        sym_to_sector: dict[str, str] = {}
+        mapping_file = getattr(
+            getattr(self.config, "sector_rs", None),
+            "mapping_file",
+            "config/industry_mappings.json",
+        )
+        try:
+            p = Path(mapping_file)
+            if not p.is_file():
+                p = Path(__file__).resolve().parents[2] / mapping_file
+            if p.is_file():
+                data = json.loads(p.read_text(encoding="utf-8"))
+                for sec_name, sym_list in data.items():
+                    for s in sym_list:
+                        sym_to_sector[s.strip()] = sec_name.strip()
+        except Exception:
+            pass
+
         frames = {
             "n500": self._fetch_csv(NIFTY500_URL),
             "mid150": self._fetch_csv(MIDCAP150_URL),
@@ -85,7 +105,7 @@ class NSEUniverseIngestor(Ingestor):
                         "symbol": sym,
                         "company_name": str(r["Company Name"]).strip(),
                         "isin": str(r["ISIN Code"]).strip(),
-                        "sector": None,
+                        "sector": sym_to_sector.get(sym),
                         "industry": str(r.get("Industry", "")).strip(),
                         "is_bfsi": False,
                         "is_fno": False,
