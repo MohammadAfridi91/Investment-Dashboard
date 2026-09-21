@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime
 
 from core.config import Config, load_config
 from core.database.client import DB
+from core.ingestion.bse_announcements import BSEAnnouncementsIngestor
 from core.ingestion.corporate_actions import CorporateActionsIngestor
 from core.ingestion.gsec_yield import GSecYieldIngestor
 from core.ingestion.nse_bhavcopy import NSEBhavcopyIngestor
@@ -17,6 +18,7 @@ from core.ingestion.nse_institutional import NSEInstitutionalIngestor
 from core.ingestion.nse_market_flow import NSEMarketFlowIngestor
 from core.ingestion.nse_surveillance import NSESurveillanceIngestor
 from core.ingestion.nse_universe import NSEUniverseIngestor
+from core.ingestion.screener_collector import ScreenerCollector
 from core.utils.http import NSEHttpClient, PlainHttpClient
 from core.utils.logging import configure_logging, get_logger
 from core.utils.trading_calendar import is_trading_day
@@ -114,7 +116,19 @@ def run_eod(cfg: Config, db: DB, target_date: date, skip_ingestion: bool) -> int
     log.info("gsec_result", status=gsec.status, rows=gsec.rows_upserted, error=gsec.error)
     total_rows += gsec.rows_upserted
 
+    bse = BSEAnnouncementsIngestor(plain, db, cfg).run(target_date)
+    log.info("bse_result", status=bse.status, rows=bse.rows_upserted, error=bse.error)
+    total_rows += bse.rows_upserted
+
+    # Screener runs weekly or if financial table is empty
+    fin_count = len(db.select("forensic_financials", columns="symbol", limit=1))
+    if target_date.weekday() == 5 or fin_count == 0:
+        scr = ScreenerCollector(plain, db, cfg).run(target_date)
+        log.info("screener_result", status=scr.status, rows=scr.rows_upserted, error=scr.error)
+        total_rows += scr.rows_upserted
+
     return total_rows
+
 
 
 def run_premarket(cfg: Config, db: DB, target_date: date) -> int:

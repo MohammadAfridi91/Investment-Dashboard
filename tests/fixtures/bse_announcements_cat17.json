@@ -1,0 +1,20 @@
+{
+  "Table": [
+    {
+      "SCRIP_CD": 500325,
+      "SLONGNAME": "RELIANCE INDUSTRIES LTD.",
+      "NEWS_SUB": "SEBI Investigation and Order under Regulation 30",
+      "HEADLINE": "Receipt of SEBI show cause notice regarding disclosure of agreements",
+      "DT_TM": "2024-01-25T11:00:00",
+      "ATTACHMENTNAME": "sebi_notice_500325.pdf"
+    },
+    {
+      "SCRIP_CD": 500209,
+      "SLONGNAME": "INFOSYS LTD.",
+      "NEWS_SUB": "GST Search and Inspection",
+      "HEADLINE": "Inspection by GST authorities at branch office under Section 67",
+      "DT_TM": "2024-01-25T17:45:00",
+      "ATTACHMENTNAME": "gst_search_500209.pdf"
+    }
+  ]
+}

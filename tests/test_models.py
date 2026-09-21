@@ -68,3 +68,44 @@ def test_corporate_action_row() -> None:
     )
     assert r.adjustment_factor == 2.0
 
+
+def test_auditor_history_row() -> None:
+    from core.models import AuditorHistoryRow
+    r = AuditorHistoryRow(
+        symbol="INFY",
+        fiscal_year=2024,
+        auditor_firm="S.R. Batliboi & Co",
+        is_tier1=True,
+        mid_term_resignation=True,
+    )
+    assert r.is_tier1 is True
+    assert r.mid_term_resignation is True
+
+
+def test_governance_event_row() -> None:
+    from core.models import GovernanceEventRow
+    r = GovernanceEventRow(
+        symbol="RELIANCE",
+        event_date=date.today(),
+        event_type="GST_RAID",
+        severity="FATAL",
+    )
+    assert r.severity == "FATAL"
+
+
+def test_forensic_financials_row() -> None:
+    from core.models import ForensicFinancialsRow
+    r = ForensicFinancialsRow(
+        symbol="INFY",
+        fiscal_year=2024,
+        sales=153670.0,
+        net_profit=26233.0,
+        beneish_m_score=-2.45,
+        altman_z_double_prime=4.2,
+        piotroski_f_score=8,
+    )
+    assert r.sales == 153670.0
+    assert r.beneish_m_score == -2.45
+    assert r.piotroski_f_score == 8
+
+

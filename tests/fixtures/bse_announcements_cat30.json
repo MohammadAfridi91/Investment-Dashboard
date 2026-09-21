@@ -1,0 +1,20 @@
+{
+  "Table": [
+    {
+      "SCRIP_CD": 500209,
+      "SLONGNAME": "INFOSYS LTD.",
+      "NEWS_SUB": "Announcement under Regulation 30 (LODR)-Resignation of Statutory Auditor",
+      "HEADLINE": "Resignation of Statutory Auditor S.R. Batliboi & Associates LLP with qualified opinion regarding internal controls",
+      "DT_TM": "2024-01-25T14:30:00",
+      "ATTACHMENTNAME": "auditor_resignation_500209.pdf"
+    },
+    {
+      "SCRIP_CD": 532540,
+      "SLONGNAME": "TATA CONSULTANCY SERVICES LTD.",
+      "NEWS_SUB": "Appointment of Statutory Auditors",
+      "HEADLINE": "Re-appointment of BSR & Co LLP as Statutory Auditors for FY 2024-25",
+      "DT_TM": "2024-01-25T16:00:00",
+      "ATTACHMENTNAME": "auditor_appointment_532540.pdf"
+    }
+  ]
+}

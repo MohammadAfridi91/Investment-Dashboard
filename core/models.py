@@ -159,3 +159,111 @@ class CorporateActionRow(BaseModel):
     adjustment_factor: float = 1.0
     source: str = "nse_actions_csv"
 
+
+class AuditorHistoryRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    symbol: str
+    fiscal_year: int
+    auditor_firm: str
+    is_tier1: bool = False
+    mid_term_resignation: bool = False
+    resignation_date: date | None = None
+    has_qualified_opinion: bool = False
+    qualification_notes: str | None = None
+    caro_qualified: bool = False
+    non_audit_fee_ratio: float | None = None
+
+
+class GovernanceEventRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    symbol: str
+    event_date: date
+    event_type: str
+    severity: str | None = None
+    details: str | None = None
+    source: str = "bse_api"
+    source_url: str | None = None
+    ingested_at: datetime | None = None
+
+
+class ForensicFinancialsRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    symbol: str
+    fiscal_year: int
+    sector: str | None = None
+    sales: float | None = None
+    cogs: float | None = None
+    sga_expense: float | None = None
+    ebitda: float | None = None
+    depreciation: float | None = None
+    ebit: float | None = None
+    interest_expense: float | None = None
+    tax_rate: float | None = None
+    nopat: float | None = None
+    net_profit: float | None = None
+    other_income: float | None = None
+    cfo: float | None = None
+    capex: float | None = None
+    fcf: float | None = None
+    principal_repayment: float | None = None
+    gross_block: float | None = None
+    cwip: float | None = None
+    net_block: float | None = None
+    total_assets: float | None = None
+    current_assets: float | None = None
+    current_liabilities: float | None = None
+    receivables: float | None = None
+    inventory: float | None = None
+    trade_payables: float | None = None
+    cash_and_equivalents: float | None = None
+    net_worth: float | None = None
+    total_debt: float | None = None
+    total_liabilities: float | None = None
+    net_debt: float | None = None
+    shares_outstanding: float | None = None
+    contingent_liabilities: float | None = None
+    market_cap: float | None = None
+    enterprise_value: float | None = None
+    capital_employed: float | None = None
+    roce: float | None = None
+    roce_5y_avg: float | None = None
+    roce_wacc_spread: float | None = None
+    roic_5y_avg: float | None = None
+    roiic_5y: float | None = None
+    wacc: float | None = None
+    gross_debt_to_ebitda: float | None = None
+    net_debt_to_ebitda: float | None = None
+    interest_coverage: float | None = None
+    dscr: float | None = None
+    beneish_m_score: float | None = None
+    altman_z_double_prime: float | None = None
+    piotroski_f_score: int | None = None
+    sloan_accrual: float | None = None
+    cfo_to_ebitda_5y: float | None = None
+    cfo_to_pat: float | None = None
+    fcf_years_positive: int | None = None
+    gross_margin_stable: bool = True
+    cash_conversion_cycle: float | None = None
+    receivable_days: float | None = None
+    inventory_days: float | None = None
+    payable_days: float | None = None
+    fixed_asset_turnover: float | None = None
+    capex_to_depreciation: float | None = None
+    capacity_utilization_pass: bool = True
+    implied_dcf_growth: float | None = None
+    implied_dcf_growth_bear: float | None = None
+    implied_dcf_growth_base: float | None = None
+    implied_dcf_growth_bull: float | None = None
+    fcf_yield: float | None = None
+    has_rpt_siphoning: bool = False
+    esop_dilution_annual: float | None = None
+    effective_date: date | None = None
+    announcement_date: date | None = None
+    restatement_flag: bool = False
+    consolidated_flag: bool = True
+    accounting_standard: str | None = None
+    data_source: str = "screener"
+    ingested_at: datetime | None = None
+    source_checksum: str | None = None
+
+
