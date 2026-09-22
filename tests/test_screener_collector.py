@@ -90,3 +90,20 @@ def test_screener_run(fixtures_dir: Path) -> None:
     table, rows = db.upserts[0]
     assert table == "forensic_financials"
     assert len(rows) <= 3  # Last 3 fiscal years per PIT hybrid backfill
+
+
+def test_forensic_financials_zero_nulls(fixtures_dir: Path) -> None:
+    cfg = load_config()
+    db = DummyDB()
+    raw = (fixtures_dir / "screener_infy_sample.html").read_bytes()
+    http = DummyHTTP(raw)
+    collector = ScreenerCollector(http, db, cfg)
+
+    res = collector.run(date(2024, 1, 25))
+    assert res.status == "SUCCESS"
+    table, rows = db.upserts[0]
+    assert table == "forensic_financials"
+    for row in rows:
+        null_keys = [k for k, v in row.items() if v is None]
+        assert not null_keys, f"Found NULL columns in fiscal year {row.get('fiscal_year')}: {null_keys}"
+

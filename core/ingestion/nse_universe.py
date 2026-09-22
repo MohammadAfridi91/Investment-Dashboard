@@ -105,7 +105,7 @@ class NSEUniverseIngestor(Ingestor):
                         "symbol": sym,
                         "company_name": str(r["Company Name"]).strip(),
                         "isin": str(r["ISIN Code"]).strip(),
-                        "sector": sym_to_sector.get(sym),
+                        "sector": sym_to_sector.get(sym) or str(r.get("Industry", "")).strip() or "Diversified",
                         "industry": str(r.get("Industry", "")).strip(),
                         "is_bfsi": False,
                         "is_fno": False,
