@@ -102,13 +102,12 @@ class ScreenerCollector(Ingestor):
                 cells = tr.find_all(["td", "th"])
                 if not cells:
                     continue
-                raw_label = cells[0].get_text(strip=True).lower()
-                cleaned_label = re.sub(r"[^a-z0-9% ]", "", raw_label).strip()
+                raw_label = cells[0].get_text(" ", strip=True).lower()
+                row_label = re.sub(r"[\s+*:]+$", "", re.sub(r"\s+", " ", raw_label)).strip()
                 for y, col_idx in years_idx.items():
                     if col_idx < len(cells):
                         val = _clean_val(cells[col_idx].get_text(strip=True))
-                        metrics_by_year[y][raw_label] = val
-                        metrics_by_year[y][cleaned_label] = val
+                        metrics_by_year[y][row_label] = val
 
         # Sorted list of years
         sorted_years = sorted(years_idx.keys())
@@ -127,10 +126,9 @@ class ScreenerCollector(Ingestor):
             net_profit = y_metrics.get("net profit", 0.0)
             nopat = ebit * (1.0 - tax_rate)
 
-            cfo = y_metrics.get("cash from operating activity", y_metrics.get("cash from operating activity+", 0.0))
-            capex = abs(y_metrics.get("cash from investing activity", y_metrics.get("cash from investing activity+", 0.0)))
-            fcf_direct = y_metrics.get("free cash flow")
-            fcf = fcf_direct if fcf_direct is not None else (cfo - capex)
+            cfo = y_metrics.get("cash from operating activity", 0.0)
+            capex = abs(y_metrics.get("cash from investing activity", 0.0))
+            fcf = cfo - capex
 
             equity_cap = y_metrics.get("equity capital", 0.0)
             reserves = y_metrics.get("reserves", 0.0)

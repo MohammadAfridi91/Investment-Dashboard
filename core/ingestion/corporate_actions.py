@@ -17,6 +17,7 @@ from core.utils.normalization import strip_column_names
 log = get_logger("ingest.corporate_actions")
 
 ACTIONS_URL = "https://archives.nseindia.com/content/equities/Actions.csv"
+ACTIONS_API_URL = "https://www.nseindia.com/api/corporates-corporateActions?index=equities"
 
 SPLIT_RE = re.compile(
     r"(?:Split|Sub-Division|Face Value).*?(\d+(?:\.\d+)?).*?(?:to|To|TO)\s*(?:Rs\.?)?\s*(\d+(?:\.\d+)?)",
@@ -140,6 +141,41 @@ class CorporateActionsIngestor(Ingestor):
         self.config = config
 
     def parse(self, raw: bytes, target_date: date) -> list[dict[str, Any]]:
+        # Check if response is JSON from live NSE API
+        if raw.strip().startswith((b"[", b"{")):
+            import json
+
+            data = json.loads(raw.decode("utf-8-sig", errors="ignore"))
+            rows: list[dict[str, Any]] = []
+            if isinstance(data, list):
+                for it in data:
+                    series = str(it.get("series", "")).strip().upper()
+                    if series and series not in ("EQ", "BE", ""):
+                        continue
+                    ex_dt = _parse_action_date(it.get("exDate"))
+                    if not ex_dt or ex_dt != target_date:
+                        continue
+                    sym = str(it.get("symbol", "")).strip().upper()
+                    if not sym:
+                        continue
+                    purpose = str(it.get("subject", "")).strip()
+                    rec_dt = _parse_action_date(it.get("recDate"))
+                    action_typ, factor, ratio, fv_chg, div_amt = parse_action_purpose(purpose)
+                    rows.append(
+                        {
+                            "symbol": sym,
+                            "ex_date": ex_dt.isoformat(),
+                            "record_date": rec_dt.isoformat() if rec_dt else None,
+                            "action_type": action_typ,
+                            "ratio": ratio,
+                            "face_value_change": fv_chg,
+                            "dividend_amount": div_amt,
+                            "adjustment_factor": factor,
+                            "source": "nse_actions_api",
+                        }
+                    )
+            return rows
+
         df = pd.read_csv(io.BytesIO(raw), dtype=str, skipinitialspace=True)
         df.columns = strip_column_names(list(df.columns))
 
@@ -152,7 +188,7 @@ class CorporateActionsIngestor(Ingestor):
         if not all([sym_col, ex_col, purpose_col]):
             raise ValueError(f"Actions CSV missing required columns: {list(df.columns)}")
 
-        rows: list[dict[str, Any]] = []
+        rows = []
         for _, r in df.iterrows():
             if series_col:
                 series = str(r[series_col]).strip().upper()
@@ -190,11 +226,19 @@ class CorporateActionsIngestor(Ingestor):
 
     def run(self, target_date: date) -> IngestResult:
         t0 = self._timer()
-        try:
-            raw = cast(bytes, self.http.get(ACTIONS_URL))
-        except Exception as e:
-            log.error("corporate_actions_fetch_failed", error=str(e))
-            return IngestResult(self.SOURCE, status="FAILED", error=str(e))
+        raw: bytes | None = None
+        for url in (ACTIONS_URL, ACTIONS_API_URL):
+            try:
+                raw = cast(bytes, self.http.get(url))
+                if raw and len(raw) > 20:
+                    break
+            except Exception as e:
+                log.warning("corporate_actions_fetch_try_failed", url=url, error=str(e))
+                continue
+
+        if not raw:
+            log.error("corporate_actions_fetch_failed", error="All corporate actions endpoints failed")
+            return IngestResult(self.SOURCE, status="FAILED", error="All corporate actions endpoints failed")
 
         checksum = sha256_bytes(raw)
         try:

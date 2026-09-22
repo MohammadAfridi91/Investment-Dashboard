@@ -16,6 +16,7 @@ from core.utils.normalization import strip_column_names
 log = get_logger("ingest.market_flow")
 
 FIIDII_URL = "https://archives.nseindia.com/content/equities/fiidii_trading_activity.csv"
+FIIDII_API_URL = "https://www.nseindia.com/api/fiidiiTradeReact"
 
 
 def _parse_fii_date(s: Any) -> date | None:
@@ -40,6 +41,30 @@ class NSEMarketFlowIngestor(Ingestor):
         self.config = config
 
     def parse(self, raw: bytes, target_date: date) -> tuple[float | None, float | None]:
+        fii_net: float | None = None
+        dii_net: float | None = None
+
+        # Check if response is JSON
+        if raw.strip().startswith((b"[", b"{")):
+            import json
+
+            data = json.loads(raw.decode("utf-8-sig", errors="ignore"))
+            if isinstance(data, list):
+                for item in data:
+                    row_date = _parse_fii_date(item.get("date"))
+                    if row_date and row_date != target_date:
+                        continue
+                    cat = str(item.get("category", "")).strip().upper()
+                    try:
+                        val = float(str(item.get("netValue", "")).replace(",", "").strip())
+                    except (ValueError, TypeError):
+                        continue
+                    if "FII" in cat or "FPI" in cat:
+                        fii_net = val
+                    elif "DII" in cat:
+                        dii_net = val
+            return fii_net, dii_net
+
         df = pd.read_csv(io.BytesIO(raw), dtype=str, skipinitialspace=True)
         df.columns = strip_column_names(list(df.columns))
 
@@ -49,9 +74,6 @@ class NSEMarketFlowIngestor(Ingestor):
 
         if not cat_col or not net_col:
             raise ValueError(f"fiidii CSV missing required columns: {list(df.columns)}")
-
-        fii_net: float | None = None
-        dii_net: float | None = None
 
         for _, r in df.iterrows():
             if date_col:
@@ -74,11 +96,19 @@ class NSEMarketFlowIngestor(Ingestor):
 
     def run(self, target_date: date) -> IngestResult:
         t0 = self._timer()
-        try:
-            raw = cast(bytes, self.http.get(FIIDII_URL))
-        except Exception as e:
-            log.error("market_flow_fetch_failed", error=str(e))
-            return IngestResult(self.SOURCE, status="FAILED", error=str(e))
+        raw: bytes | None = None
+        for url in (FIIDII_URL, FIIDII_API_URL):
+            try:
+                raw = cast(bytes, self.http.get(url))
+                if raw and len(raw) > 20:
+                    break
+            except Exception as e:
+                log.warning("market_flow_fetch_try_failed", url=url, error=str(e))
+                continue
+
+        if not raw:
+            log.error("market_flow_fetch_failed", error="All FII/DII endpoints failed")
+            return IngestResult(self.SOURCE, status="FAILED", error="All FII/DII endpoints failed")
 
         checksum = sha256_bytes(raw)
         try:

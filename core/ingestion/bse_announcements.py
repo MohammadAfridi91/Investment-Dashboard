@@ -72,11 +72,27 @@ class BSEAnnouncementsIngestor(Ingestor):
                 return sym
         return None
 
-    def _fetch_category(self, url: str) -> list[dict[str, Any]]:
+    def _fetch_category(
+        self, base_url: str, target_date: date | None = None
+    ) -> list[dict[str, Any]]:
         delay_s = float(self.config.ingestion.request_delay_bse_api_ms) / 1000.0
         time.sleep(delay_s)
+        url = base_url
+        if target_date:
+            dt_str = target_date.strftime("%Y%m%d")
+            sep = "&" if "?" in base_url else "?"
+            url = f"{base_url}{sep}strPrevDate={dt_str}&strToDate={dt_str}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://www.bseindia.com/",
+            "Origin": "https://www.bseindia.com",
+            "Accept": "application/json, text/plain, */*",
+        }
         try:
-            raw = cast(bytes, self.http.get(url))
+            try:
+                raw = cast(bytes, self.http.get(url, headers=headers))
+            except TypeError:
+                raw = cast(bytes, self.http.get(url))
             data = json.loads(raw.decode("utf-8-sig", errors="ignore"))
             if isinstance(data, dict) and "Table" in data and isinstance(data["Table"], list):
                 return cast(list[dict[str, Any]], data["Table"])
@@ -180,9 +196,9 @@ class BSEAnnouncementsIngestor(Ingestor):
                 name_map[cname] = sym
             name_map[sym] = sym
 
-        items_30 = self._fetch_category(BSE_API_CAT30)
-        items_17 = self._fetch_category(BSE_API_CAT17)
-        items_bm = self._fetch_category(BSE_API_CATBM)
+        items_30 = self._fetch_category(BSE_API_CAT30, target_date)
+        items_17 = self._fetch_category(BSE_API_CAT17, target_date)
+        items_bm = self._fetch_category(BSE_API_CATBM, target_date)
         all_items = items_30 + items_17 + items_bm
 
         gov_events, auditor_rows = self.classify_announcements(all_items, target_date, name_map)

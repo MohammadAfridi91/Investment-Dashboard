@@ -17,6 +17,8 @@ from core.utils.normalization import strip_column_names
 
 log = get_logger("ingest.derivatives")
 
+UDIFF_BHAVCOPY_URL = "https://nsearchives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_{yyyymmdd}_F_0000.csv.zip"
+UDIFF_FALLBACK_URL = "https://archives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_{yyyymmdd}_F_0000.csv.zip"
 BHAVCOPY_URL_TEMPLATE = (
     "https://archives.nseindia.com/content/historical/DERIVATIVES/"
     "{year}/{month}/fo{dd}{month}{year}bhav.csv.zip"
@@ -44,27 +46,26 @@ class NSEDerivativesIngestor(Ingestor):
         self.config = config
 
     def fetch_bhavcopy(self, target_date: date) -> bytes:
-        urls = [
-            f"https://nsearchives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_{target_date.strftime('%Y%m%d')}_F_0000.csv.zip",
-            BHAVCOPY_URL_TEMPLATE.format(
-                year=target_date.strftime("%Y"),
-                month=target_date.strftime("%b").upper(),
-                dd=target_date.strftime("%d"),
-            ),
-            (
-                "https://nsearchives.nseindia.com/content/historical/DERIVATIVES/"
-                f"{target_date.strftime('%Y')}/{target_date.strftime('%b').upper()}/"
-                f"fo{target_date.strftime('%d')}{target_date.strftime('%b').upper()}{target_date.strftime('%Y')}bhav.csv.zip"
-            ),
+        yyyymmdd = target_date.strftime("%Y%m%d")
+        year = target_date.strftime("%Y")
+        month = target_date.strftime("%b").upper()
+        dd = target_date.strftime("%d")
+
+        candidates = [
+            UDIFF_BHAVCOPY_URL.format(yyyymmdd=yyyymmdd),
+            UDIFF_FALLBACK_URL.format(yyyymmdd=yyyymmdd),
+            BHAVCOPY_URL_TEMPLATE.format(year=year, month=month, dd=dd),
         ]
-        last_err: Exception | None = None
-        for url in urls:
-            log.info("derivatives_fetch_bhavcopy", url=url)
+        for url in candidates:
             try:
-                return cast(bytes, self.http.get(url))
+                log.info("derivatives_fetch_bhavcopy", url=url)
+                raw = cast(bytes, self.http.get(url))
+                if raw and len(raw) > 100:
+                    return raw
             except Exception as e:
-                last_err = e
-        raise RuntimeError(f"Failed to fetch F&O bhavcopy from all endpoints: {last_err}")
+                log.warning("derivatives_fetch_bhavcopy_candidate_failed", url=url, error=str(e))
+                continue
+        raise ValueError(f"Failed to fetch F&O bhavcopy for {target_date} from all candidates")
 
     def fetch_mwpl(self, target_date: date) -> bytes | None:
         url = MWPL_URL_TEMPLATE.format(ddmmyyyy=target_date.strftime("%d%m%Y"))
@@ -141,27 +142,27 @@ class NSEDerivativesIngestor(Ingestor):
         df = pd.read_csv(io.BytesIO(raw_csv), dtype=str, skipinitialspace=True)
         df.columns = strip_column_names(list(df.columns))
 
-        if "TckrSymb" in df.columns:
-            col_map = {
-                "TckrSymb": "SYMBOL",
-                "XpryDt": "EXPIRY_DT",
-                "StrkPric": "STRIKE_PR",
-                "OptnTp": "OPTION_TYP",
-                "OpnIntrst": "OPEN_INT",
-                "ChngInOpnIntrst": "CHG_IN_OI",
-                "ClsPric": "CLOSE",
-                "SttlmPric": "SETTLE_PR",
-                "UndrlygPric": "UNDERLYING",
-            }
-            df.rename(columns=col_map, inplace=True)
-            inst_map = {
-                "STF": "FUTSTK",
-                "STO": "OPTSTK",
-                "IDF": "FUTIDX",
-                "IDO": "OPTIDX",
-            }
+        # Support UDiFF format normalization
+        if "TckrSymb" in df.columns or "FinInstrmTp" in df.columns:
+            inst_map = {"STF": "FUTSTK", "STO": "OPTSTK", "IDF": "FUTIDX", "IDO": "OPTIDX"}
             if "FinInstrmTp" in df.columns:
-                df["INSTRUMENT"] = df["FinInstrmTp"].str.strip().map(lambda x: inst_map.get(x, x))
+                df["INSTRUMENT"] = df["FinInstrmTp"].str.strip().map(inst_map).fillna(df["FinInstrmTp"])
+            if "TckrSymb" in df.columns:
+                df["SYMBOL"] = df["TckrSymb"]
+            if "XpryDt" in df.columns:
+                df["EXPIRY_DT"] = df["XpryDt"]
+            if "OpnIntrst" in df.columns:
+                df["OPEN_INT"] = df["OpnIntrst"]
+            if "ChngInOpnIntrst" in df.columns:
+                df["CHG_IN_OI"] = df["ChngInOpnIntrst"]
+            if "SttlmPric" in df.columns:
+                df["SETTLE_PR"] = df["SttlmPric"]
+            if "ClsPric" in df.columns:
+                df["CLOSE"] = df["ClsPric"]
+            if "StrkPric" in df.columns:
+                df["STRIKE_PR"] = df["StrkPric"]
+            if "OptnTp" in df.columns:
+                df["OPTION_TYP"] = df["OptnTp"]
 
         req_cols = {"INSTRUMENT", "SYMBOL", "EXPIRY_DT", "OPEN_INT"}
         if not req_cols.issubset(set(df.columns)):

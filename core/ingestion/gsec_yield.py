@@ -29,10 +29,12 @@ class GSecYieldIngestor(Ingestor):
     def parse_html(self, raw_html: bytes) -> float | None:
         soup = BeautifulSoup(raw_html, "html.parser")
         for tr in soup.find_all("tr"):
-            text = tr.get_text()
-            if any(k in text.lower() for k in ("10-year", "10 year", "10 yr", "ten year")):
-                cells = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
-                for c in reversed(cells):
+            cells = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
+            if not cells or len(cells) > 20:
+                continue
+            header = cells[0].lower()
+            if any(k in header for k in ("10-year", "10 year", "10 yr", "ten year")):
+                for c in reversed(cells[1:]):
                     cleaned = re.sub(r"[^\d.]", "", c)
                     if cleaned:
                         try:
