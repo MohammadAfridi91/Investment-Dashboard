@@ -163,9 +163,7 @@ class NSEBhavcopyIngestor(Ingestor):
             today_dv = r.get("delivery_value")
             if today_dv is not None and len(dv_prior) >= 5:
                 arr = np.array(dv_prior)
-                r["delivery_percentile_20d"] = float(
-                    (arr < today_dv).sum() / len(arr) * 100.0
-                )
+                r["delivery_percentile_20d"] = float((arr < today_dv).sum() / len(arr) * 100.0)
             else:
                 r["delivery_percentile_20d"] = None
 

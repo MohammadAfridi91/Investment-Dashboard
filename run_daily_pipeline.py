@@ -8,6 +8,8 @@ from datetime import UTC, date, datetime
 
 from core.config import Config, load_config
 from core.database.client import DB
+from core.indicators.regime import update_daily_market_regime
+from core.indicators.technicals import TechnicalIndicatorsComputer
 from core.ingestion.bse_announcements import BSEAnnouncementsIngestor
 from core.ingestion.corporate_actions import CorporateActionsIngestor
 from core.ingestion.gsec_yield import GSecYieldIngestor
@@ -109,7 +111,9 @@ def run_eod(cfg: Config, db: DB, target_date: date, skip_ingestion: bool) -> int
     total_rows += flow.rows_upserted
 
     actions = CorporateActionsIngestor(plain, db, cfg).run(target_date)
-    log.info("actions_result", status=actions.status, rows=actions.rows_upserted, error=actions.error)
+    log.info(
+        "actions_result", status=actions.status, rows=actions.rows_upserted, error=actions.error
+    )
     total_rows += actions.rows_upserted
 
     gsec = GSecYieldIngestor(plain, db, cfg).run(target_date)
@@ -127,8 +131,63 @@ def run_eod(cfg: Config, db: DB, target_date: date, skip_ingestion: bool) -> int
         log.info("screener_result", status=scr.status, rows=scr.rows_upserted, error=scr.error)
         total_rows += scr.rows_upserted
 
-    return total_rows
+    # Week 4: Market regime update & Technical indicators computation
+    try:
+        update_daily_market_regime(db, cfg, target_date)
+    except Exception as e:
+        log.error("market_regime_update_failed", error=str(e))
 
+    try:
+        tech_count = TechnicalIndicatorsComputer(db, cfg).run_for_date(target_date)
+        total_rows += tech_count
+        log.info("technicals_result", rows=tech_count)
+    except Exception as e:
+        log.error("technicals_computation_failed", error=str(e))
+
+    # Week 5: Evaluate Tactical and Strategic Desks
+    try:
+        from core.compliance.sebi_ra import archive_card_report
+        from core.engines.strategic_desk import StrategicDesk
+        from core.engines.tactical_desk import TacticalDesk
+
+        tactical_desk = TacticalDesk(db, cfg)
+        strategic_desk = StrategicDesk(db, cfg)
+
+        # Tactical Desk: Evaluate F&O non-BFSI universe
+        fno_candidates = db.select(
+            "universe", columns="symbol", filters={"is_fno": True, "is_bfsi": False}
+        )
+        card1_count = 0
+        for cand in fno_candidates:
+            sym = cand.get("symbol")
+            if not sym:
+                continue
+            card1 = tactical_desk.evaluate_from_db(sym, target_date)
+            if card1:
+                archive_card_report(card1, db=db)
+                card1_count += 1
+        log.info("tactical_desk_result", cards_evaluated=card1_count)
+        total_rows += card1_count
+
+        # Strategic Desk: Evaluate Nifty 500 non-BFSI universe
+        strat_candidates = db.select(
+            "universe", columns="symbol", filters={"is_bfsi": False, "is_nifty500": True}
+        )
+        card2_count = 0
+        for cand in strat_candidates:
+            sym = cand.get("symbol")
+            if not sym:
+                continue
+            card2 = strategic_desk.evaluate_from_db(sym, target_date)
+            if card2:
+                archive_card_report(card2, db=db)
+                card2_count += 1
+        log.info("strategic_desk_result", cards_evaluated=card2_count)
+        total_rows += card2_count
+    except Exception as e:
+        log.error("desks_evaluation_failed", error=str(e))
+
+    return total_rows
 
 
 def run_premarket(cfg: Config, db: DB, target_date: date) -> int:
@@ -137,9 +196,13 @@ def run_premarket(cfg: Config, db: DB, target_date: date) -> int:
         cfg.ingestion.request_delay_nse_archives_ms,
     )
     surv = NSESurveillanceIngestor(plain, db, cfg).run(target_date)
-    log.info("premarket_surveillance_result", status=surv.status, rows=surv.rows_upserted, error=surv.error)
+    log.info(
+        "premarket_surveillance_result",
+        status=surv.status,
+        rows=surv.rows_upserted,
+        error=surv.error,
+    )
     return surv.rows_upserted
-
 
 
 def main() -> int:
@@ -156,7 +219,10 @@ def main() -> int:
 
     date_str = args.date or os.environ.get("TARGET_DATE")
     target_date = date.fromisoformat(date_str) if date_str else datetime.now(UTC).date()
-    skip_ingestion = args.skip_ingestion or os.environ.get("SKIP_INGESTION", "").lower() in ("true", "1")
+    skip_ingestion = args.skip_ingestion or os.environ.get("SKIP_INGESTION", "").lower() in (
+        "true",
+        "1",
+    )
 
     log.info(
         "pipeline_start",

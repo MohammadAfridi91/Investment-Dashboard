@@ -127,7 +127,9 @@ class NSESurveillanceIngestor(Ingestor):
         written = 0
         if valid_rows:
             try:
-                written = self.db.upsert("surveillance_registry", valid_rows, on_conflict="symbol,record_date")
+                written = self.db.upsert(
+                    "surveillance_registry", valid_rows, on_conflict="symbol,record_date"
+                )
             except Exception as e:
                 log.error("surveillance_upsert_failed", error=str(e))
                 return IngestResult(self.SOURCE, status="FAILED", error=str(e))

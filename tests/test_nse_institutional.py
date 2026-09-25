@@ -18,7 +18,9 @@ class DummyDB:
     def select(self, table: str, *a: Any, **k: Any) -> list[dict[str, Any]]:
         return []
 
-    def select_in(self, table: str, column: str, values: list[Any], columns: str = "*") -> list[dict[str, Any]]:
+    def select_in(
+        self, table: str, column: str, values: list[Any], columns: str = "*"
+    ) -> list[dict[str, Any]]:
         if table == "derivative_metrics":
             return [r for r in self.derivative_metrics if r.get(column) in values]
         return []

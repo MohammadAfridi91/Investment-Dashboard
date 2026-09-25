@@ -119,7 +119,9 @@ class NSEMarketFlowIngestor(Ingestor):
 
         if fii_net is None and dii_net is None:
             log.warning("market_flow_no_data_for_date", date=str(target_date))
-            return IngestResult(self.SOURCE, status="SKIPPED", checksum=checksum, error="no FII/DII rows for date")
+            return IngestResult(
+                self.SOURCE, status="SKIPPED", checksum=checksum, error="no FII/DII rows for date"
+            )
 
         regime_update: dict[str, Any] = {
             "trade_date": target_date.isoformat(),

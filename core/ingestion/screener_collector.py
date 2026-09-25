@@ -136,7 +136,9 @@ class ScreenerCollector(Ingestor):
             reserves = y_metrics.get("reserves", 0.0)
             net_worth = equity_cap + reserves
             total_debt = y_metrics.get("borrowings", 0.0)
-            total_liab = y_metrics.get("total liabilities", 0.0) or (net_worth + total_debt + y_metrics.get("other liabilities", 0.0))
+            total_liab = y_metrics.get("total liabilities", 0.0) or (
+                net_worth + total_debt + y_metrics.get("other liabilities", 0.0)
+            )
             fixed_assets = y_metrics.get("fixed assets", 0.0)
             cwip = y_metrics.get("cwip", 0.0)
             total_assets = y_metrics.get("total assets", 0.0) or total_liab
@@ -160,7 +162,9 @@ class ScreenerCollector(Ingestor):
             inv_days = round((inventory / cogs) * 365.0, 2) if cogs > 0 else 0.0
             pay_days = round((trade_payables / cogs) * 365.0, 2) if cogs > 0 else 0.0
             ccc = round(rec_days + inv_days - pay_days, 2)
-            fa_turnover = round(sales / fixed_assets, 2) if (fixed_assets > 0 and sales > 0) else 0.0
+            fa_turnover = (
+                round(sales / fixed_assets, 2) if (fixed_assets > 0 and sales > 0) else 0.0
+            )
             capex_dep = round(capex / dep, 2) if dep > 0 else (1.0 if capex > 0 else 0.0)
             mcap = net_worth * 2.5 if net_worth > 0 else 1000.0
             fcf_yld = round((fcf / mcap) * 100.0, 4) if mcap > 0 else 0.0
@@ -180,21 +184,9 @@ class ScreenerCollector(Ingestor):
                 if ebitda > 0
                 else (0.0 if net_debt <= 0 else round(net_debt, 4))
             )
-            int_cov = (
-                round(ebit / interest, 4)
-                if interest > 0
-                else (99.99 if ebit > 0 else 0.0)
-            )
-            dscr_val = (
-                round(cfo / interest, 4)
-                if interest > 0
-                else (99.99 if cfo > 0 else 0.0)
-            )
-            cfo_pat = (
-                round(cfo / net_profit, 4)
-                if net_profit > 0
-                else (1.0 if cfo > 0 else 0.0)
-            )
+            int_cov = round(ebit / interest, 4) if interest > 0 else (99.99 if ebit > 0 else 0.0)
+            dscr_val = round(cfo / interest, 4) if interest > 0 else (99.99 if cfo > 0 else 0.0)
+            cfo_pat = round(cfo / net_profit, 4) if net_profit > 0 else (1.0 if cfo > 0 else 0.0)
 
             row: dict[str, Any] = {
                 "symbol": symbol,
@@ -350,8 +342,12 @@ class ScreenerCollector(Ingestor):
             if len(window) > 1:
                 base_r = window[0]
                 delta_nopat = float(cur.get("nopat", 0.0)) - float(base_r.get("nopat", 0.0))
-                cur_ic = float(cur.get("total_assets", 0.0)) - float(cur.get("current_liabilities", 0.0))
-                base_ic = float(base_r.get("total_assets", 0.0)) - float(base_r.get("current_liabilities", 0.0))
+                cur_ic = float(cur.get("total_assets", 0.0)) - float(
+                    cur.get("current_liabilities", 0.0)
+                )
+                base_ic = float(base_r.get("total_assets", 0.0)) - float(
+                    base_r.get("current_liabilities", 0.0)
+                )
                 delta_ic = cur_ic - base_ic
                 cur["roiic_5y"] = (
                     round((delta_nopat / delta_ic) * 100.0, 4)
@@ -395,7 +391,9 @@ class ScreenerCollector(Ingestor):
         rows_to_save = rows[-3:] if len(rows) > 3 else rows
 
         try:
-            written = self.db.upsert("forensic_financials", rows_to_save, on_conflict="symbol,fiscal_year")
+            written = self.db.upsert(
+                "forensic_financials", rows_to_save, on_conflict="symbol,fiscal_year"
+            )
             return written
         except Exception as e:
             log.error("screener_upsert_failed", symbol=symbol, error=str(e))

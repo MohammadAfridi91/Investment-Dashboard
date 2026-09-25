@@ -35,9 +35,16 @@ CARO_RE = re.compile(
     r"physical verification not conducted|inventory discrepancy)",
     re.IGNORECASE,
 )
-CFO_RESIGN_RE = re.compile(r"(cfo resignation|resignation of cfo|chief financial officer)", re.IGNORECASE)
-CS_RESIGN_RE = re.compile(r"(cs resignation|resignation of company secretary|company secretary)", re.IGNORECASE)
-RAID_RE = re.compile(r"(gst search|gst raid|it raid|income tax search|ed raid|enforcement directorate)", re.IGNORECASE)
+CFO_RESIGN_RE = re.compile(
+    r"(cfo resignation|resignation of cfo|chief financial officer)", re.IGNORECASE
+)
+CS_RESIGN_RE = re.compile(
+    r"(cs resignation|resignation of company secretary|company secretary)", re.IGNORECASE
+)
+RAID_RE = re.compile(
+    r"(gst search|gst raid|it raid|income tax search|ed raid|enforcement directorate)",
+    re.IGNORECASE,
+)
 
 
 def _parse_bse_date(dt_str: Any) -> date | None:
@@ -131,7 +138,12 @@ class BSEAnnouncementsIngestor(Ingestor):
             is_auditor_qual = bool(AUDITOR_QUAL_RE.search(text))
             is_caro = bool(CARO_RE.search(text))
 
-            if is_auditor_resign or is_auditor_qual or is_caro or "statutory auditor" in text.lower():
+            if (
+                is_auditor_resign
+                or is_auditor_qual
+                or is_caro
+                or "statutory auditor" in text.lower()
+            ):
                 is_t1 = any(p.search(text) for p in tier1_patterns)
                 auditor_rows.append(
                     {

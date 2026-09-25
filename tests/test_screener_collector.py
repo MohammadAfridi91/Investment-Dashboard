@@ -11,9 +11,7 @@ from core.ingestion.screener_collector import ScreenerCollector
 class DummyDB:
     def __init__(self) -> None:
         self.upserts: list[tuple[str, list[dict[str, Any]]]] = []
-        self.universe: list[dict[str, Any]] = [
-            {"symbol": "INFY", "company_name": "Infosys Ltd"}
-        ]
+        self.universe: list[dict[str, Any]] = [{"symbol": "INFY", "company_name": "Infosys Ltd"}]
         self.market_regime: list[dict[str, Any]] = [
             {"trade_date": "2024-01-25", "gsec_10y_yield": 0.0718}
         ]
@@ -105,5 +103,6 @@ def test_forensic_financials_zero_nulls(fixtures_dir: Path) -> None:
     assert table == "forensic_financials"
     for row in rows:
         null_keys = [k for k, v in row.items() if v is None]
-        assert not null_keys, f"Found NULL columns in fiscal year {row.get('fiscal_year')}: {null_keys}"
-
+        assert not null_keys, (
+            f"Found NULL columns in fiscal year {row.get('fiscal_year')}: {null_keys}"
+        )

@@ -13,6 +13,7 @@ def compute_beneish_m_score(f: dict[str, Any], f_prev: dict[str, Any]) -> float:
     v6.5 Correction C-2: LVGI coefficient is -0.327 (NOT +0.0327).
     Threshold: M > -2.22 suggests earnings manipulation risk.
     """
+
     def safe(num: float, den: float) -> float:
         return (num / den) if den != 0.0 else 1.0
 

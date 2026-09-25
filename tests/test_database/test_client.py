@@ -34,6 +34,8 @@ def test_database_client_resilient_bulk_upsert_postgrest_fallback() -> None:
 
 
 def test_get_client_factory() -> None:
-    with patch.dict(os.environ, {"SUPABASE_URL": "https://test.supabase.co", "SUPABASE_SERVICE_KEY": "test-key"}):
+    with patch.dict(
+        os.environ, {"SUPABASE_URL": "https://test.supabase.co", "SUPABASE_SERVICE_KEY": "test-key"}
+    ):
         c = get_client()
         assert isinstance(c, DB)

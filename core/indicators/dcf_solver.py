@@ -49,7 +49,6 @@ def compute_wacc(
     kd_pre = interest_exp / total_debt if total_debt > 0 and interest_exp > 0 else rf + 0.01
     kd = kd_pre * (1.0 - tax_rate)
 
-
     v = mcap + total_debt
     if v <= 0:
         return round(ke, 4)
@@ -77,10 +76,7 @@ def solve_implied_dcf_growth(
         return None
 
     def objective(g: float) -> float:
-        pv = sum(
-            fcff_0 * ((1.0 + g) ** t) / ((1.0 + wacc) ** t)
-            for t in range(1, years + 1)
-        )
+        pv = sum(fcff_0 * ((1.0 + g) ** t) / ((1.0 + wacc) ** t) for t in range(1, years + 1))
         tv = (fcff_0 * ((1.0 + g) ** years) * (1.0 + g_term)) / (
             (wacc - g_term) * ((1.0 + wacc) ** years)
         )

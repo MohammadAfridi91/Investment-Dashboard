@@ -30,8 +30,7 @@ class Ingestor(ABC):
     SCHEDULE: str
 
     @abstractmethod
-    def run(self, target_date: date) -> IngestResult:
-        ...
+    def run(self, target_date: date) -> IngestResult: ...
 
     def _timer(self) -> float:
         return time.monotonic()

@@ -14,7 +14,12 @@ class DummyDB:
         self.universe: list[dict[str, Any]] = [
             {"symbol": "INFY", "company_name": "Infosys", "isin": "INE009A01021", "is_fno": False},
             {"symbol": "TCS", "company_name": "TCS", "isin": "INE467B01029", "is_fno": False},
-            {"symbol": "RELIANCE", "company_name": "Reliance", "isin": "INE002A01018", "is_fno": False},
+            {
+                "symbol": "RELIANCE",
+                "company_name": "Reliance",
+                "isin": "INE002A01018",
+                "is_fno": False,
+            },
         ]
         self.daily_prices: list[dict[str, Any]] = [
             {"symbol": "INFY", "trade_date": "2024-01-25", "close_price": 1665.0},
@@ -27,7 +32,9 @@ class DummyDB:
             return list(self.universe)
         return []
 
-    def select_in(self, table: str, column: str, values: list[Any], columns: str = "*") -> list[dict[str, Any]]:
+    def select_in(
+        self, table: str, column: str, values: list[Any], columns: str = "*"
+    ) -> list[dict[str, Any]]:
         if table == "daily_prices":
             return [r for r in self.daily_prices if r.get(column) in values]
         return []

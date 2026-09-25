@@ -17,8 +17,12 @@ from core.utils.normalization import strip_column_names
 
 log = get_logger("ingest.derivatives")
 
-UDIFF_BHAVCOPY_URL = "https://nsearchives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_{yyyymmdd}_F_0000.csv.zip"
-UDIFF_FALLBACK_URL = "https://archives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_{yyyymmdd}_F_0000.csv.zip"
+UDIFF_BHAVCOPY_URL = (
+    "https://nsearchives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_{yyyymmdd}_F_0000.csv.zip"
+)
+UDIFF_FALLBACK_URL = (
+    "https://archives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_{yyyymmdd}_F_0000.csv.zip"
+)
 BHAVCOPY_URL_TEMPLATE = (
     "https://archives.nseindia.com/content/historical/DERIVATIVES/"
     "{year}/{month}/fo{dd}{month}{year}bhav.csv.zip"
@@ -99,7 +103,11 @@ class NSEDerivativesIngestor(Ingestor):
             df.columns = strip_column_names(list(df.columns))
             sym_col = next((c for c in df.columns if "SYMBOL" in c.upper()), None)
             util_col = next(
-                (c for c in df.columns if any(k in c.upper() for k in ("UTILIZATION", "LIMIT EXHAUSTED", "PERCENT"))),
+                (
+                    c
+                    for c in df.columns
+                    if any(k in c.upper() for k in ("UTILIZATION", "LIMIT EXHAUSTED", "PERCENT"))
+                ),
                 None,
             )
             if not sym_col or not util_col:
@@ -125,7 +133,11 @@ class NSEDerivativesIngestor(Ingestor):
             banned: set[str] = set()
             for line in text.splitlines():
                 s = line.strip().strip(",")
-                if s and not s.lower().startswith("securities in ban") and not s.lower().startswith("symbol"):
+                if (
+                    s
+                    and not s.lower().startswith("securities in ban")
+                    and not s.lower().startswith("symbol")
+                ):
                     banned.add(s)
             return banned
         except Exception as e:
@@ -146,7 +158,9 @@ class NSEDerivativesIngestor(Ingestor):
         if "TckrSymb" in df.columns or "FinInstrmTp" in df.columns:
             inst_map = {"STF": "FUTSTK", "STO": "OPTSTK", "IDF": "FUTIDX", "IDO": "OPTIDX"}
             if "FinInstrmTp" in df.columns:
-                df["INSTRUMENT"] = df["FinInstrmTp"].str.strip().map(inst_map).fillna(df["FinInstrmTp"])
+                df["INSTRUMENT"] = (
+                    df["FinInstrmTp"].str.strip().map(inst_map).fillna(df["FinInstrmTp"])
+                )
             if "TckrSymb" in df.columns:
                 df["SYMBOL"] = df["TckrSymb"]
             if "XpryDt" in df.columns:
@@ -231,17 +245,29 @@ class NSEDerivativesIngestor(Ingestor):
             spot = spot_map.get(sym_str)
 
             # Prior metrics
-            priors = sorted(prior_by_sym.get(sym_str, []), key=lambda x: str(x["trade_date"]), reverse=True)
+            priors = sorted(
+                prior_by_sym.get(sym_str, []), key=lambda x: str(x["trade_date"]), reverse=True
+            )
             prev = priors[0] if priors else None
 
             prev_oi = int(prev["fno_oi"]) if prev and prev.get("fno_oi") is not None else None
-            oi_change = (total_oi - prev_oi) if prev_oi is not None else sum(c["chg_oi"] for c in contracts)
-            prev_coc = float(prev["cost_of_carry"]) if prev and prev.get("cost_of_carry") is not None else None
+            oi_change = (
+                (total_oi - prev_oi) if prev_oi is not None else sum(c["chg_oi"] for c in contracts)
+            )
+            prev_coc = (
+                float(prev["cost_of_carry"])
+                if prev and prev.get("cost_of_carry") is not None
+                else None
+            )
             prev_pcr = float(prev["pcr"]) if prev and prev.get("pcr") is not None else None
-            prev_basis = float(prev["basis_pct"]) if prev and prev.get("basis_pct") is not None else None
+            prev_basis = (
+                float(prev["basis_pct"]) if prev and prev.get("basis_pct") is not None else None
+            )
 
             # 20d rollover avg
-            roll_hist = [float(p["rollover_pct"]) for p in priors[:20] if p.get("rollover_pct") is not None]
+            roll_hist = [
+                float(p["rollover_pct"]) for p in priors[:20] if p.get("rollover_pct") is not None
+            ]
             avg_roll_20d = round(float(np.mean(roll_hist)), 2) if roll_hist else None
 
             # Cost of Carry & Basis calculation
@@ -264,7 +290,9 @@ class NSEDerivativesIngestor(Ingestor):
             # Rollover %
             rollover_pct: float | None = None
             if next_month and (near["oi"] + next_month["oi"]) > 0:
-                rollover_pct = round((next_month["oi"] / (near["oi"] + next_month["oi"])) * 100.0, 2)
+                rollover_pct = round(
+                    (next_month["oi"] / (near["oi"] + next_month["oi"])) * 100.0, 2
+                )
 
             # PCR and Max Pain from OPTSTK
             pcr: float | None = None
@@ -311,7 +339,9 @@ class NSEDerivativesIngestor(Ingestor):
                             best_strike = s
                     max_pain = float(best_strike)
 
-            oi_pcr_change = round(pcr - prev_pcr, 4) if (pcr is not None and prev_pcr is not None) else None
+            oi_pcr_change = (
+                round(pcr - prev_pcr, 4) if (pcr is not None and prev_pcr is not None) else None
+            )
 
             candidate: dict[str, Any] = {
                 "symbol": sym_str,
@@ -384,7 +414,9 @@ class NSEDerivativesIngestor(Ingestor):
             return IngestResult(self.SOURCE, status="FAILED", checksum=checksum, error=str(e))
 
         if not rows:
-            return IngestResult(self.SOURCE, status="SKIPPED", checksum=checksum, error="no rows parsed")
+            return IngestResult(
+                self.SOURCE, status="SKIPPED", checksum=checksum, error="no rows parsed"
+            )
 
         # Sync is_fno flag to universe
         self._sync_universe_fno(fno_symbols)
@@ -396,7 +428,9 @@ class NSEDerivativesIngestor(Ingestor):
         written = 0
         if valid_rows:
             try:
-                written = self.db.upsert("derivative_metrics", valid_rows, on_conflict="symbol,trade_date")
+                written = self.db.upsert(
+                    "derivative_metrics", valid_rows, on_conflict="symbol,trade_date"
+                )
             except Exception as e:
                 log.error("derivatives_upsert_failed", error=str(e))
                 return IngestResult(

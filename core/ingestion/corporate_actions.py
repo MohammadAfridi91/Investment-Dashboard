@@ -41,7 +41,9 @@ def _parse_action_date(val: Any) -> date | None:
     return None
 
 
-def parse_action_purpose(purpose: str) -> tuple[str, float, float | None, float | None, float | None]:
+def parse_action_purpose(
+    purpose: str,
+) -> tuple[str, float, float | None, float | None, float | None]:
     """Parse corporate action purpose string.
 
     Returns: (action_type, adjustment_factor, ratio, face_value_change, dividend_amount)
@@ -124,7 +126,12 @@ def apply_adjustments(db: DB, target_date: date) -> int:
         try:
             db.upsert("daily_prices", pre_ex_rows, on_conflict="symbol,trade_date")
             total_adjusted += len(pre_ex_rows)
-            log.info("applied_corporate_action_adjustment", symbol=sym, factor=factor, rows=len(pre_ex_rows))
+            log.info(
+                "applied_corporate_action_adjustment",
+                symbol=sym,
+                factor=factor,
+                rows=len(pre_ex_rows),
+            )
         except Exception as e:
             log.error("corporate_action_adjustment_failed", symbol=sym, error=str(e))
 
@@ -183,7 +190,9 @@ class CorporateActionsIngestor(Ingestor):
         ex_col = next((c for c in df.columns if "EX" in c.upper() and "DATE" in c.upper()), None)
         purpose_col = next((c for c in df.columns if "PURPOSE" in c.upper()), None)
         series_col = next((c for c in df.columns if "SERIES" in c.upper()), None)
-        rec_col = next((c for c in df.columns if "RECORD" in c.upper() and "DATE" in c.upper()), None)
+        rec_col = next(
+            (c for c in df.columns if "RECORD" in c.upper() and "DATE" in c.upper()), None
+        )
 
         if not all([sym_col, ex_col, purpose_col]):
             raise ValueError(f"Actions CSV missing required columns: {list(df.columns)}")
@@ -237,8 +246,12 @@ class CorporateActionsIngestor(Ingestor):
                 continue
 
         if not raw:
-            log.error("corporate_actions_fetch_failed", error="All corporate actions endpoints failed")
-            return IngestResult(self.SOURCE, status="FAILED", error="All corporate actions endpoints failed")
+            log.error(
+                "corporate_actions_fetch_failed", error="All corporate actions endpoints failed"
+            )
+            return IngestResult(
+                self.SOURCE, status="FAILED", error="All corporate actions endpoints failed"
+            )
 
         checksum = sha256_bytes(raw)
         try:
@@ -266,7 +279,13 @@ class CorporateActionsIngestor(Ingestor):
         adj_count = apply_adjustments(self.db, target_date)
 
         dur_ms = int((self._timer() - t0) * 1000)
-        log.info("corporate_actions_done", rows=len(rows), written=written, adjusted=adj_count, duration_ms=dur_ms)
+        log.info(
+            "corporate_actions_done",
+            rows=len(rows),
+            written=written,
+            adjusted=adj_count,
+            duration_ms=dur_ms,
+        )
         return IngestResult(
             self.SOURCE,
             status="SUCCESS",

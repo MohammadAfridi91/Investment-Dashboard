@@ -13,11 +13,13 @@ log = get_logger("http")
 NSE_HOMEPAGE = "https://www.nseindia.com/"
 NSE_ARCHIVE_BASE = "https://archives.nseindia.com"
 
+
 class HttpError(Exception):
     def __init__(self, status: int, url: str, body: str = ""):
         super().__init__(f"HTTP {status} {url}: {body[:200]}")
         self.status = status
         self.url = url
+
 
 class NSEHttpClient:
     def __init__(self, user_agent: str, delay_ms: int = 500, timeout: int = 30):
@@ -45,10 +47,12 @@ class NSEHttpClient:
             log.warning("nse_bootstrap_failed", error=str(e))
         return s
 
-    @retry(stop=stop_after_attempt(3),
-           wait=wait_exponential(multiplier=1, min=2, max=8),
-           retry=retry_if_exception_type((requests.RequestException, HttpError)),
-           reraise=True)
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=8),
+        retry=retry_if_exception_type((requests.RequestException, HttpError)),
+        reraise=True,
+    )
     def get(self, url: str, allow_cookie_retry: bool = True) -> bytes:
         time.sleep(self.delay)
         r = self._session.get(url, timeout=self.timeout)
@@ -61,9 +65,15 @@ class NSEHttpClient:
             raise HttpError(r.status_code, url, r.text)
         return r.content
 
+
 class PlainHttpClient:
-    def __init__(self, user_agent: str, delay_ms: int = 500, timeout: int = 30,
-                 extra_headers: dict[str, str] | None = None):
+    def __init__(
+        self,
+        user_agent: str,
+        delay_ms: int = 500,
+        timeout: int = 30,
+        extra_headers: dict[str, str] | None = None,
+    ):
         self.delay = delay_ms / 1000.0
         self.timeout = timeout
         self._session = requests.Session()
@@ -71,10 +81,12 @@ class PlainHttpClient:
         if extra_headers:
             self._session.headers.update(extra_headers)
 
-    @retry(stop=stop_after_attempt(3),
-           wait=wait_exponential(multiplier=1, min=2, max=8),
-           retry=retry_if_exception_type((requests.RequestException, HttpError)),
-           reraise=True)
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=8),
+        retry=retry_if_exception_type((requests.RequestException, HttpError)),
+        reraise=True,
+    )
     def get(self, url: str, **kwargs: Any) -> bytes:
         time.sleep(self.delay)
         r = self._session.get(url, timeout=self.timeout, **kwargs)

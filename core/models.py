@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class UniverseRow(BaseModel):
@@ -18,6 +19,7 @@ class UniverseRow(BaseModel):
     is_midsmall400: bool = False
     listed_since: date | None = None
     raw_payload_checksum: str | None = None
+
 
 class DailyPriceRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -44,6 +46,7 @@ class DailyPriceRow(BaseModel):
     data_source: str = "nse_bhavcopy"
     raw_payload_checksum: str | None = None
 
+
 class BenchmarkPriceRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     symbol: str
@@ -52,12 +55,14 @@ class BenchmarkPriceRow(BaseModel):
     volume: int | None = None
     raw_payload_checksum: str | None = None
 
+
 class SectorIndexRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     index_symbol: str
     trade_date: date
     close_price: float
     raw_payload_checksum: str | None = None
+
 
 class MarketRegimeRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -75,6 +80,7 @@ class MarketRegimeRow(BaseModel):
     us10y: float | None = None
     gsec_10y_yield: float | None = None
     regime_classification: str | None = None
+
 
 class PipelineHealthRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -267,3 +273,66 @@ class ForensicFinancialsRow(BaseModel):
     source_checksum: str | None = None
 
 
+class TechnicalIndicatorsRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    symbol: str
+    trade_date: date
+    ema_20: float | None = None
+    ema_50: float | None = None
+    sma_200: float | None = None
+    atr_14: float | None = None
+    atr_sma_20: float | None = None
+    atr_compression: bool = False
+    mansfield_rs_500: float | None = None
+    prev_mansfield_rs_500: float | None = None
+    mansfield_rs_sector: float | None = None
+    prev_mansfield_rs_sector: float | None = None
+    avwap_swing_low: float | None = None
+    avwap_earnings: float | None = None
+    vpvr_hvn: float | None = None
+    vpvr_lvn: float | None = None
+    is_vpvr_breakout: bool = False
+    fractal_swing_low_20d: float = 0.0
+    vpvr_hvn_levels: list[float] | None = None
+    swing_high_levels_250d: list[float] | None = None
+    swing_low_levels_250d: list[float] | None = None
+    delivery_spike_ratio: float | None = None
+    adtv_20d: float | None = None
+
+
+class TradeCheckCardRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str | None = None
+    symbol: str
+    desk_type: str
+    eval_date: date
+    hard_gates_pass: bool
+    score: float
+    max_score: float
+    verdict: str
+    entry_trigger: float | None = None
+    stop_loss: float | None = None
+    target_1: float | None = None
+    target_2: float | None = None
+    risk_reward_ratio: float | None = None
+    position_size_shares: int | None = None
+    valid_until: date | None = None
+    card_details: dict[str, Any] = Field(default_factory=dict)
+    sebi_disclosure_snapshot: dict[str, Any] | None = None
+    restatement_caution: bool = False
+    created_at: datetime | None = None
+
+
+class SebiComplianceLogRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str | None = None
+    event_type: str
+    event_ts: datetime | None = None
+    symbol: str | None = None
+    card_id: str | None = None
+    actor: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    rationale: str | None = None
+    disclosure_text: str | None = None
+    retention_until: date
+    checksum: str

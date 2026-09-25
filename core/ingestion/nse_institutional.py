@@ -54,7 +54,6 @@ class NSEInstitutionalIngestor(Ingestor):
                 patterns.append(re.compile(bounded_pat, re.IGNORECASE))
         return patterns
 
-
     def parse_deals_csv(
         self,
         raw: bytes | None,
@@ -72,8 +71,17 @@ class NSEInstitutionalIngestor(Ingestor):
             sym_col = next((c for c in df.columns if "SYMBOL" in c.upper()), None)
             date_col = next((c for c in df.columns if "DATE" in c.upper()), None)
             client_col = next((c for c in df.columns if "CLIENT" in c.upper()), None)
-            dir_col = next((c for c in df.columns if any(k in c.upper() for k in ("BUY/SELL", "DEAL TYPE", "BUY", "SELL"))), None)
-            qty_col = next((c for c in df.columns if "QUANTITY" in c.upper() or "QTY" in c.upper()), None)
+            dir_col = next(
+                (
+                    c
+                    for c in df.columns
+                    if any(k in c.upper() for k in ("BUY/SELL", "DEAL TYPE", "BUY", "SELL"))
+                ),
+                None,
+            )
+            qty_col = next(
+                (c for c in df.columns if "QUANTITY" in c.upper() or "QTY" in c.upper()), None
+            )
             price_col = next((c for c in df.columns if "PRICE" in c.upper()), None)
 
             if not all([sym_col, client_col, qty_col, price_col]):
@@ -159,7 +167,9 @@ class NSEInstitutionalIngestor(Ingestor):
                         b["is_wash_trade"] = True
                         s["is_wash_trade"] = True
 
-    def _sync_derivative_institutional_buy(self, rows: list[dict[str, Any]], target_date: date) -> None:
+    def _sync_derivative_institutional_buy(
+        self, rows: list[dict[str, Any]], target_date: date
+    ) -> None:
         """Update has_institutional_net_buy on derivative_metrics if net institutional buy >= 5 Cr."""
         min_net_buy_inr = 50_000_000.0  # 5 Cr per Master Plan §12.2
         net_by_sym: dict[str, float] = {}
@@ -186,8 +196,10 @@ class NSEInstitutionalIngestor(Ingestor):
                 columns="symbol,trade_date,has_institutional_net_buy",
             )
             to_update = [
-                d for d in deriv_rows
-                if str(d.get("trade_date")) == str(target_date) and not d.get("has_institutional_net_buy")
+                d
+                for d in deriv_rows
+                if str(d.get("trade_date")) == str(target_date)
+                and not d.get("has_institutional_net_buy")
             ]
             for d in to_update:
                 d["has_institutional_net_buy"] = True

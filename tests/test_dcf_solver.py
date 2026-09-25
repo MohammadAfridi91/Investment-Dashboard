@@ -44,7 +44,9 @@ def test_solve_implied_dcf_growth_residual() -> None:
     # Assume a known growth rate g_target = 0.12 (12%)
     # Compute what EV would be:
     ev = sum(fcff_0 * ((1.0 + 0.12) ** t) / ((1.0 + wacc) ** t) for t in range(1, years + 1))
-    ev += (fcff_0 * ((1.0 + 0.12) ** years) * (1.0 + g_term)) / ((wacc - g_term) * ((1.0 + wacc) ** years))
+    ev += (fcff_0 * ((1.0 + 0.12) ** years) * (1.0 + g_term)) / (
+        (wacc - g_term) * ((1.0 + wacc) ** years)
+    )
 
     # Solve for g from ev
     solved_g = solve_implied_dcf_growth(fcff_0, ev, wacc, g_term=g_term, years=years, tol=1e-5)

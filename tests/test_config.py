@@ -13,11 +13,13 @@ def test_load_config_default():
     assert cfg.pit.price_backfill_sessions == 375
     assert cfg.RISK_OFF_SCORE_THRESHOLD == 99
 
+
 def test_nse_holidays_loaded():
     cfg = load_config(year=2026)
     assert len(cfg.nse_holidays) > 0
     assert cfg.is_holiday(date(2026, 1, 26))
     assert not cfg.is_holiday(date(2026, 1, 27))
+
 
 def test_no_flat_card1_keys():
     cfg = load_config()

@@ -31,7 +31,9 @@ def test_market_regime_gsec_field_present() -> None:
 
 
 def test_derivative_metrics_row() -> None:
-    r = DerivativeMetricsRow(symbol="INFY", trade_date=date.today(), fno_oi=10000, fno_oi_change=500)
+    r = DerivativeMetricsRow(
+        symbol="INFY", trade_date=date.today(), fno_oi=10000, fno_oi_change=500
+    )
     assert r.symbol == "INFY"
     assert r.fno_oi == 10000
     assert r.is_fno_ban is False
@@ -71,6 +73,7 @@ def test_corporate_action_row() -> None:
 
 def test_auditor_history_row() -> None:
     from core.models import AuditorHistoryRow
+
     r = AuditorHistoryRow(
         symbol="INFY",
         fiscal_year=2024,
@@ -84,6 +87,7 @@ def test_auditor_history_row() -> None:
 
 def test_governance_event_row() -> None:
     from core.models import GovernanceEventRow
+
     r = GovernanceEventRow(
         symbol="RELIANCE",
         event_date=date.today(),
@@ -95,6 +99,7 @@ def test_governance_event_row() -> None:
 
 def test_forensic_financials_row() -> None:
     from core.models import ForensicFinancialsRow
+
     r = ForensicFinancialsRow(
         symbol="INFY",
         fiscal_year=2024,
@@ -109,3 +114,67 @@ def test_forensic_financials_row() -> None:
     assert r.piotroski_f_score == 8
 
 
+def test_technical_indicators_row() -> None:
+    from core.models import TechnicalIndicatorsRow
+
+    r = TechnicalIndicatorsRow(
+        symbol="TCS",
+        trade_date=date.today(),
+        ema_20=3850.5,
+        ema_50=3800.0,
+        sma_200=3600.0,
+        atr_14=45.2,
+        atr_compression=True,
+        mansfield_rs_500=4.5,
+        avwap_swing_low=3780.0,
+        vpvr_hvn=3820.0,
+        is_vpvr_breakout=True,
+        fractal_swing_low_20d=3750.0,
+        vpvr_hvn_levels=[3800.0, 3820.0, 3850.0],
+    )
+    assert r.symbol == "TCS"
+    assert r.ema_20 == 3850.5
+    assert r.atr_compression is True
+    assert r.is_vpvr_breakout is True
+    assert len(r.vpvr_hvn_levels or []) == 3
+
+
+def test_trade_check_card_row() -> None:
+    from core.models import TradeCheckCardRow
+
+    r = TradeCheckCardRow(
+        symbol="TATASTEEL",
+        desk_type="TACTICAL",
+        eval_date=date(2026, 9, 25),
+        hard_gates_pass=True,
+        score=9.0,
+        max_score=10.0,
+        verdict="EXECUTE",
+        entry_trigger=155.0,
+        stop_loss=147.0,
+        target_1=165.0,
+        target_2=178.0,
+        risk_reward_ratio=2.87,
+        position_size_shares=600,
+        valid_until=date(2026, 9, 26),
+    )
+    assert r.symbol == "TATASTEEL"
+    assert r.desk_type == "TACTICAL"
+    assert r.verdict == "EXECUTE"
+    assert r.entry_trigger == 155.0
+
+
+def test_sebi_compliance_log_row() -> None:
+    from core.models import SebiComplianceLogRow
+
+    r = SebiComplianceLogRow(
+        event_type="RESEARCH_REPORT",
+        symbol="TATASTEEL",
+        actor="system",
+        payload={"report": "test"},
+        retention_until=date(2031, 9, 25),
+        checksum="abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+    )
+    assert r.event_type == "RESEARCH_REPORT"
+    assert r.symbol == "TATASTEEL"
+    assert len(r.checksum) == 64

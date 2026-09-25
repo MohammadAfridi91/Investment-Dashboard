@@ -105,7 +105,9 @@ class NSEUniverseIngestor(Ingestor):
                         "symbol": sym,
                         "company_name": str(r["Company Name"]).strip(),
                         "isin": str(r["ISIN Code"]).strip(),
-                        "sector": sym_to_sector.get(sym) or str(r.get("Industry", "")).strip() or "Diversified",
+                        "sector": sym_to_sector.get(sym)
+                        or str(r.get("Industry", "")).strip()
+                        or "Diversified",
                         "industry": str(r.get("Industry", "")).strip(),
                         "is_bfsi": False,
                         "is_fno": False,
@@ -138,7 +140,9 @@ class NSEUniverseIngestor(Ingestor):
             log.error("universe_upsert_failed", error=str(e))
             return IngestResult(self.SOURCE, status="FAILED", error=str(e))
 
-        log.info("universe_done", total=len(rows), upserted=n, excluded_bfsi=len(all_rows) - len(rows))
+        log.info(
+            "universe_done", total=len(rows), upserted=n, excluded_bfsi=len(all_rows) - len(rows)
+        )
         return IngestResult(
             self.SOURCE,
             status="SUCCESS",

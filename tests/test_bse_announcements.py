@@ -56,7 +56,11 @@ def test_bse_announcements_classification(fixtures_dir: Path) -> None:
     # Check governance events
     gov_rows = next(rows for t, rows in db.upserts if t == "governance_events")
     gov_types = {r["event_type"] for r in gov_rows}
-    assert "GST_RAID" in gov_types or "SEBI_REGULATORY" in gov_types or "AUDITOR_RESIGNATION" in gov_types
+    assert (
+        "GST_RAID" in gov_types
+        or "SEBI_REGULATORY" in gov_types
+        or "AUDITOR_RESIGNATION" in gov_types
+    )
 
     # Check auditor history
     aud_rows = next(rows for t, rows in db.upserts if t == "auditor_history")

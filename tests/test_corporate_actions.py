@@ -30,7 +30,9 @@ class DummyDB:
         ]
         self.corporate_actions: list[dict[str, Any]] = []
 
-    def select(self, table: str, *a: Any, filters: dict[str, Any] | None = None, **k: Any) -> list[dict[str, Any]]:
+    def select(
+        self, table: str, *a: Any, filters: dict[str, Any] | None = None, **k: Any
+    ) -> list[dict[str, Any]]:
         if table == "corporate_actions":
             if filters and "ex_date" in filters:
                 return [r for r in self.corporate_actions if r.get("ex_date") == filters["ex_date"]]
@@ -89,8 +91,6 @@ def test_parse_action_purpose() -> None:
     assert ratio is None
     assert fv is None
     assert div == 9.0
-
-
 
 
 def test_corporate_actions_ingest_and_adjust(fixtures_dir: Path) -> None:
