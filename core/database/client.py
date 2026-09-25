@@ -60,6 +60,11 @@ class DatabaseClient:
         self._client: Client = self.supabase  # Backward-compatible alias
         self.pg_dsn = pg_dsn or os.environ.get("SUPABASE_DB_URL")
 
+    @classmethod
+    def from_env(cls) -> DatabaseClient:
+        """Factory method to instantiate client using environment variables."""
+        return cls()
+
     @contextmanager
     def pg(self) -> Iterator[psycopg2.extensions.connection]:
         if not self.pg_dsn:
@@ -139,7 +144,10 @@ class DatabaseClient:
         for k, v in (filters or {}).items():
             q = q.eq(k, v)
         if order:
-            q = q.order(order)
+            parts = order.replace(" ", ".").split(".")
+            col = parts[0]
+            is_desc = len(parts) > 1 and parts[1].lower() == "desc"
+            q = q.order(col, desc=is_desc)
         if limit:
             q = q.limit(limit)
         res = q.execute()
