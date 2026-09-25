@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -63,15 +62,15 @@ def render_dcf_simulator(
     with col2:
         # Solve implied growth
         implied_g = solve_implied_dcf_growth(
-            current_fcf=fcf,
-            target_ev=ev,
+            fcff_0=fcf,
+            ev=ev,
             wacc=wacc,
-            terminal_growth=terminal_g,
+            g_term=terminal_g,
             years=10,
         )
 
         st.markdown("#### Valuation Reality Check")
-        if np.isnan(implied_g):
+        if implied_g is None:
             st.error("DCF Solver could not converge with current inputs.")
         else:
             diff = implied_g - sector_tam_growth
@@ -106,13 +105,13 @@ def render_dcf_simulator(
         matrix_data[col_label] = []
         for w in wacc_steps:
             g_sol = solve_implied_dcf_growth(
-                current_fcf=fcf,
-                target_ev=ev,
+                fcff_0=fcf,
+                ev=ev,
                 wacc=w,
-                terminal_growth=tg,
+                g_term=tg,
                 years=10,
             )
-            val_str = f"{g_sol * 100:.1f}%" if not np.isnan(g_sol) else "N/A"
+            val_str = f"{g_sol * 100:.1f}%" if g_sol is not None else "N/A"
             matrix_data[col_label].append(val_str)
 
     row_index = [f"WACC {w * 100:.1f}%" for w in wacc_steps]
