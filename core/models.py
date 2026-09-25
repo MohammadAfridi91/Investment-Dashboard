@@ -153,6 +153,21 @@ class InstitutionalDealRow(BaseModel):
     is_wash_trade: bool = False
 
 
+class CorporateEventRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    symbol: str
+    event_date: date
+    event_type: str
+    purpose: str | None = None
+    is_sebi_regulatory: bool = False
+    source: str | None = None
+    ingested_at: datetime | None = None
+
+
+# Alias for plural/singular naming parity
+CorporateEventsRow = CorporateEventRow
+
+
 class CorporateActionRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     symbol: str

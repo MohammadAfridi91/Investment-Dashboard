@@ -344,7 +344,15 @@ class TechnicalIndicatorsComputer:
         )
 
         # Build sector mapping symbol -> sector_index
-        mapping_path = Path("config/industry_mappings.json")
+        if isinstance(self.config, dict):
+            mappings_file = self.config.get(
+                "industry_mappings_file", "config/industry_mappings.json"
+            )
+        else:
+            mappings_file = getattr(
+                self.config, "industry_mappings_file", "config/industry_mappings.json"
+            )
+        mapping_path = Path(mappings_file)
         sym_to_sector: dict[str, str] = {}
         if mapping_path.exists():
             try:

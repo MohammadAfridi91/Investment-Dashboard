@@ -71,6 +71,33 @@ def test_corporate_action_row() -> None:
     assert r.adjustment_factor == 2.0
 
 
+def test_corporate_event_row() -> None:
+    from core.models import CorporateEventRow, CorporateEventsRow
+
+    r = CorporateEventRow(
+        symbol="TCS",
+        event_date=date.today(),
+        event_type="AGM",
+        purpose="Annual General Meeting",
+        is_sebi_regulatory=False,
+        source="bse_api",
+    )
+    assert r.symbol == "TCS"
+    assert r.event_type == "AGM"
+    assert r.purpose == "Annual General Meeting"
+    assert r.is_sebi_regulatory is False
+    assert r.source == "bse_api"
+
+    # Parity alias check
+    r2 = CorporateEventsRow(
+        symbol="INFY",
+        event_date=date.today(),
+        event_type="EARNINGS",
+    )
+    assert r2.symbol == "INFY"
+    assert r2.is_sebi_regulatory is False
+
+
 def test_auditor_history_row() -> None:
     from core.models import AuditorHistoryRow
 
