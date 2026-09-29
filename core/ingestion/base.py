@@ -6,6 +6,10 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
+from core.utils.logging import get_logger
+
+log = get_logger("ingestion")
+
 
 @dataclass
 class IngestResult:
@@ -34,3 +38,26 @@ class Ingestor(ABC):
 
     def _timer(self) -> float:
         return time.monotonic()
+
+    def run_safe(self, target_date: date) -> IngestResult:
+        """Run the ingestor, converting any unexpected exception into a FAILED result.
+
+        Guarantees one crashing source can never abort the rest of the pipeline and that every
+        result carries a duration.
+        """
+        started = self._timer()
+        try:
+            result = self.run(target_date)
+        except Exception as exc:
+            source = getattr(self, "SOURCE", type(self).__name__)
+            log.exception("ingestor_crashed", source=source)
+            return IngestResult(
+                source=source,
+                status="FAILED",
+                target_date=target_date,
+                error=f"{type(exc).__name__}: {exc}",
+                duration_ms=int((self._timer() - started) * 1000),
+            )
+        if not result.duration_ms:
+            result.duration_ms = int((self._timer() - started) * 1000)
+        return result

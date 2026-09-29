@@ -16,10 +16,13 @@ from pathlib import Path
 import pytest
 
 from core.compliance.sebi_ra import (
+    ArchiveError,
+    ComplianceConfigError,
     archive_card_report,
     build_disclosure_snapshot,
     log_upsi_access,
     render_html_report,
+    retention_until,
     verify_prohibited_language,
 )
 from core.models import TradeCheckCardRow
@@ -107,8 +110,10 @@ def test_acceptance_test_14_sha256_archive_parity(
     assert json_data["disclosures"]["symbol"] == "TATASTEEL"
 
     # 5. 5-year retention check
-    expected_retention = sample_tactical_card.eval_date + timedelta(days=5 * 365)
+    expected_retention = retention_until(sample_tactical_card.eval_date)
     assert log_row.retention_until == expected_retention
+    # Never shorter than 5 calendar years (leap-year safe)
+    assert log_row.retention_until >= date(2031, 9, 25)
 
 
 def test_acceptance_test_15_upsi_access_logging() -> None:
@@ -188,7 +193,13 @@ def test_archive_and_upsi_with_db(
     assert json_path.exists()
     assert len(checksum) == 64
     assert log_row.event_type == "RESEARCH_REPORT"
-    assert mock_db.upsert.call_count == 2  # sebi_compliance_log and trade_check_cards
+    # Append-only writes: durable archive copy + compliance log; mutable card row is upserted.
+    inserted = [c.args[0] for c in mock_db.insert.call_args_list]
+    assert inserted == ["compliance_report_archive", "sebi_compliance_log"]
+    assert mock_db.upsert.call_count == 1
+    archive_rows = mock_db.insert.call_args_list[0].args[1]
+    assert archive_rows[0]["checksum_sha256"] == checksum
+    assert hashlib.sha256(archive_rows[0]["report_html"].encode()).hexdigest() == checksum
 
     # 2. Test log_upsi_access with db
     upsi_log = log_upsi_access(
@@ -198,4 +209,42 @@ def test_archive_and_upsi_with_db(
         db=mock_db,
     )
     assert upsi_log.event_type == "UPSI_ACCESS"
-    assert mock_db.upsert.call_count == 3
+    assert mock_db.insert.call_count == 3
+    assert mock_db.upsert.call_count == 1
+
+
+def test_registration_number_required(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SEBI_RA_REGISTRATION_NUMBER", raising=False)
+    with pytest.raises(ComplianceConfigError, match="not set"):
+        build_disclosure_snapshot("TCS", "id", "STRATEGIC")
+
+
+@pytest.mark.parametrize("bad", ["INH000099999", "INH000000000", "12345", "inhxyz"])
+def test_registration_number_rejects_placeholders(
+    monkeypatch: pytest.MonkeyPatch, bad: str
+) -> None:
+    monkeypatch.setenv("SEBI_RA_REGISTRATION_NUMBER", bad)
+    with pytest.raises(ComplianceConfigError):
+        build_disclosure_snapshot("TCS", "id", "STRATEGIC")
+
+
+def test_registration_number_appears_in_report(
+    sample_tactical_card: TradeCheckCardRow,
+) -> None:
+    d = build_disclosure_snapshot("TATASTEEL", "id", "TACTICAL")
+    assert d["sebi_registration_number"] == "INH000012345"
+    assert "INH000012345" in render_html_report(sample_tactical_card, d)
+
+
+def test_archive_is_write_once(sample_tactical_card: TradeCheckCardRow, tmp_path: Path) -> None:
+    html_path, _, checksum, _ = archive_card_report(sample_tactical_card, archive_dir=tmp_path)
+    original = html_path.read_bytes()
+    with pytest.raises(ArchiveError, match="immutable"):
+        archive_card_report(sample_tactical_card, archive_dir=tmp_path)
+    assert html_path.read_bytes() == original
+    assert hashlib.sha256(original).hexdigest() == checksum
+
+
+def test_retention_handles_leap_day() -> None:
+    assert retention_until(date(2024, 2, 29)) >= date(2029, 3, 1)
+    assert retention_until(date(2026, 9, 25)) > date(2026, 9, 25) + timedelta(days=5 * 365)

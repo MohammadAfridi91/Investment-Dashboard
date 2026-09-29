@@ -2,7 +2,9 @@
 
 Implements SEBI (Research Analysts) Regulations, 2014 compliance:
 - Zero third-party PDF generators (HTML + JSON immutable archive only)
-- Immutable archive at data/compliance/reports/{card_id}.html and .json
+- Immutable archive: exclusive-create files at data/compliance/reports/{card_id}.html/.json
+  PLUS a durable, append-only, byte-exact copy in the compliance_report_archive table
+  (runner disks are ephemeral, so the DB copy is the system of record)
 - SHA-256 checksum calculation & database recording
 - 5-year statutory retention tracking (retention_until)
 - Prohibited language filter (no 'guaranteed', 'assured', 'risk-free', '100% safe')
@@ -15,14 +17,67 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import os
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from dateutil.relativedelta import relativedelta
+
 from core.database.client import DB
 from core.models import SebiComplianceLogRow, TradeCheckCardRow
+
+RETENTION_YEARS = 5
+# Safety margin so retention is never *shorter* than the statutory period (leap years, TZ skew).
+RETENTION_MARGIN_DAYS = 30
+
+REG_NUMBER_ENV = "SEBI_RA_REGISTRATION_NUMBER"
+_REG_NUMBER_RE = re.compile(r"^INH\d{9}$")
+_KNOWN_PLACEHOLDER_REG_NUMBERS = {"INH000099999", "INH000000000"}
+
+DEFAULT_OWNERSHIP_DISCLOSURE = (
+    "The Research Analyst and associates do not have financial interest "
+    "exceeding 1% in the subject company as of the date of this report."
+)
+DEFAULT_CONFLICT_DISCLOSURE = (
+    "No material conflict of interest exists with the subject company. "
+    "No compensation has been received from the subject company in the preceding 12 months."
+)
+
+
+class ComplianceConfigError(RuntimeError):
+    """Required compliance configuration is missing or invalid."""
+
+
+class ArchiveError(RuntimeError):
+    """An archived report already exists or could not be written."""
+
+
+def retention_until(start: date, years: int = RETENTION_YEARS) -> date:
+    """Calendar-aware retention end date (`years` years plus a safety margin)."""
+    return start + relativedelta(years=years) + timedelta(days=RETENTION_MARGIN_DAYS)
+
+
+def resolve_registration_number(explicit: str | None = None) -> str:
+    """Return the SEBI RA registration number or fail loudly.
+
+    Never fabricates a number: an invented registration number in an archived regulatory
+    document is worse than no report.
+    """
+    reg = (explicit or os.environ.get(REG_NUMBER_ENV, "")).strip().upper()
+    if not reg:
+        raise ComplianceConfigError(
+            f"{REG_NUMBER_ENV} is not set; refusing to generate SEBI RA reports without it"
+        )
+    if not _REG_NUMBER_RE.match(reg) or reg in _KNOWN_PLACEHOLDER_REG_NUMBERS:
+        raise ComplianceConfigError(
+            f"{REG_NUMBER_ENV} must be a real SEBI RA number of the form INH#########"
+        )
+    return reg
+
 
 PROHIBITED_REGEX = re.compile(
     r"\b(guaranteed|assured|risk-free|100% safe|zero risk)\b",
@@ -48,9 +103,16 @@ def build_disclosure_snapshot(
     card_id: str,
     desk_type: str,
     analyst_name: str = "Dalal Street Automated Research Desk",
-    reg_number: str = "INH000099999",
+    reg_number: str | None = None,
 ) -> dict[str, Any]:
-    """Generates standard SEBI Research Analyst disclosure snapshot."""
+    """Generates standard SEBI Research Analyst disclosure snapshot.
+
+    The registration number comes from `reg_number` or the SEBI_RA_REGISTRATION_NUMBER
+    environment variable. Ownership / conflict statements default to the standard wording and
+    can be overridden via SEBI_RA_OWNERSHIP_DISCLOSURE / SEBI_RA_CONFLICT_DISCLOSURE; they are
+    attestations the registrant must be able to stand behind.
+    """
+    reg_number = resolve_registration_number(reg_number)
     disclosures = {
         "analyst_name": analyst_name,
         "sebi_registration_number": reg_number,
@@ -61,13 +123,11 @@ def build_disclosure_snapshot(
             "Securities investments are subject to market risks. "
             "Read all related documents carefully before investing."
         ),
-        "analyst_ownership": (
-            "The Research Analyst and associates do not have financial interest "
-            "exceeding 1% in the subject company as of the date of this report."
+        "analyst_ownership": os.environ.get(
+            "SEBI_RA_OWNERSHIP_DISCLOSURE", DEFAULT_OWNERSHIP_DISCLOSURE
         ),
-        "conflict_of_interest": (
-            "No material conflict of interest exists with the subject company. "
-            "No compensation has been received from the subject company in the preceding 12 months."
+        "conflict_of_interest": os.environ.get(
+            "SEBI_RA_CONFLICT_DISCLOSURE", DEFAULT_CONFLICT_DISCLOSURE
         ),
         "risk_affirmation": (
             "Equity investments are subject to market volatility and potential capital loss. "
@@ -237,25 +297,34 @@ def render_html_report(
     return html_content
 
 
-def archive_card_report(
+@dataclass
+class ArchiveBundle:
+    """Everything produced by archiving one card, ready for (batched) persistence."""
+
+    card_id: str
+    html_path: Path
+    json_path: Path
+    checksum: str
+    log_row: SebiComplianceLogRow
+    archive_row: dict[str, Any]
+    card_row: dict[str, Any]
+
+
+def _write_exclusive(path: Path, data: bytes) -> None:
+    try:
+        with open(path, "xb") as fh:  # exclusive create: never overwrite an archived report
+            fh.write(data)
+    except FileExistsError as exc:
+        raise ArchiveError(f"Archived report already exists and is immutable: {path}") from exc
+
+
+def write_card_archive(
     card: TradeCheckCardRow,
     disclosures: dict[str, Any] | None = None,
     archive_dir: str | Path = "data/compliance/reports",
     actor: str = "dalal_street_engine",
-    db: DB | None = None,
-) -> tuple[Path, Path, str, SebiComplianceLogRow]:
-    """Archives trade check card as immutable HTML and JSON documents, logging SEBI compliance.
-
-    Args:
-        card: Evaluated TradeCheckCardRow.
-        disclosures: SEBI disclosures dictionary (built if None).
-        archive_dir: Directory where reports are saved.
-        actor: System component or user executing archiving.
-        db: Optional DB client to persist log row.
-
-    Returns:
-        Tuple of (html_path, json_path, sha256_checksum, SebiComplianceLogRow).
-    """
+) -> ArchiveBundle:
+    """Render + write the immutable HTML/JSON archive files. Does not touch the database."""
     card_id = card.id or str(uuid.uuid4())
     card.id = card_id
 
@@ -266,42 +335,39 @@ def archive_card_report(
             desk_type=card.desk_type,
         )
 
-    # 1. Render HTML report & verify prohibited language
-    html_content = render_html_report(card, disclosures)
+    html_content = render_html_report(card, disclosures)  # also verifies prohibited language
 
-    # 2. Prepare JSON payload
+    archived_at = datetime.now(UTC)
     card_data = card.model_dump(mode="json")
     json_payload: dict[str, Any] = {
         "card": card_data,
         "disclosures": disclosures,
-        "archived_at": datetime.now(UTC).isoformat(),
+        "archived_at": archived_at.isoformat(),
         "actor": actor,
     }
-    json_content = json.dumps(json_payload, indent=2, sort_keys=True)
+    json_bytes = json.dumps(json_payload, indent=2, sort_keys=True).encode("utf-8")
+    html_bytes = html_content.encode("utf-8")
 
-    # 3. Create target directory
     out_dir = Path(archive_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-
     html_path = out_dir / f"{card_id}.html"
     json_path = out_dir / f"{card_id}.json"
 
-    # 4. Write files
-    html_bytes = html_content.encode("utf-8")
-    html_path.write_bytes(html_bytes)
-    json_path.write_bytes(json_content.encode("utf-8"))
+    _write_exclusive(html_path, html_bytes)
+    try:
+        _write_exclusive(json_path, json_bytes)
+    except ArchiveError:
+        html_path.unlink(missing_ok=True)  # do not leave a half-written archive behind
+        raise
 
-    # 5. Compute SHA-256 of HTML report for regulatory integrity
     checksum = hashlib.sha256(html_bytes).hexdigest()
+    json_checksum = hashlib.sha256(json_bytes).hexdigest()
+    retain_until = retention_until(card.eval_date)
 
-    # 6. Retention date (5 years from evaluation date)
-    retention_until = card.eval_date + timedelta(days=5 * 365)
-
-    # 7. Construct SEBI Compliance Log Row
     log_row = SebiComplianceLogRow(
         id=str(uuid.uuid4()),
         event_type="RESEARCH_REPORT",
-        event_ts=datetime.now(UTC),
+        event_ts=archived_at,
         symbol=card.symbol,
         card_id=card_id,
         actor=actor,
@@ -311,29 +377,72 @@ def archive_card_report(
             "desk_type": card.desk_type,
             "verdict": card.verdict,
             "score": card.score,
+            "json_checksum": json_checksum,
         },
         rationale=f"Automated {card.desk_type} Trade Check Card evaluation for {card.symbol} with verdict {card.verdict}",
         disclosure_text=disclosures.get("statutory_warning"),
-        retention_until=retention_until,
+        retention_until=retain_until,
         checksum=checksum,
     )
 
-    # 8. Persist to DB if provided
-    if db is not None:
-        db.upsert(
-            "sebi_compliance_log",
-            [log_row.model_dump(mode="json")],
-            on_conflict="id",
-        )
-        card_dump = card.model_dump(mode="json")
-        card_dump["sebi_disclosure_snapshot"] = disclosures
-        db.upsert(
-            "trade_check_cards",
-            [card_dump],
-            on_conflict="id",
-        )
+    card_row = card.model_dump(mode="json")
+    card_row["sebi_disclosure_snapshot"] = disclosures
 
-    return html_path, json_path, checksum, log_row
+    return ArchiveBundle(
+        card_id=card_id,
+        html_path=html_path,
+        json_path=json_path,
+        checksum=checksum,
+        log_row=log_row,
+        archive_row={
+            "card_id": card_id,
+            "symbol": card.symbol,
+            "desk_type": card.desk_type,
+            "eval_date": card.eval_date.isoformat(),
+            "checksum_sha256": checksum,
+            "json_checksum_sha256": json_checksum,
+            "report_html": html_content,
+            "report_json": json_bytes.decode("utf-8"),
+            "archived_at": archived_at.isoformat(),
+            "retention_until": retain_until.isoformat(),
+        },
+        card_row=card_row,
+    )
+
+
+def persist_archives(db: DB, bundles: list[ArchiveBundle], chunk_size: int = 50) -> None:
+    """Persist archived reports durably and append-only.
+
+    Order matters: the byte-exact archive copy is written first, then the compliance log, then
+    the (mutable) card row. Any failure raises so the caller can mark the run failed.
+    """
+    if not bundles:
+        return
+    db.insert("compliance_report_archive", [b.archive_row for b in bundles], chunk_size=chunk_size)
+    db.insert("sebi_compliance_log", [b.log_row.model_dump(mode="json") for b in bundles])
+    db.upsert("trade_check_cards", [b.card_row for b in bundles], on_conflict="id")
+
+
+def archive_card_report(
+    card: TradeCheckCardRow,
+    disclosures: dict[str, Any] | None = None,
+    archive_dir: str | Path = "data/compliance/reports",
+    actor: str = "dalal_street_engine",
+    db: DB | None = None,
+) -> tuple[Path, Path, str, SebiComplianceLogRow]:
+    """Archives a trade check card as immutable HTML/JSON files and logs SEBI compliance.
+
+    Returns:
+        Tuple of (html_path, json_path, sha256_checksum, SebiComplianceLogRow).
+
+    Raises:
+        ArchiveError: if an archive for this card already exists (archives are write-once).
+        ComplianceConfigError: if the SEBI RA registration number is not configured.
+    """
+    bundle = write_card_archive(card, disclosures, archive_dir, actor)
+    if db is not None:
+        persist_archives(db, [bundle])
+    return bundle.html_path, bundle.json_path, bundle.checksum, bundle.log_row
 
 
 def log_upsi_access(
@@ -348,8 +457,7 @@ def log_upsi_access(
     payload_data = payload or {}
     payload_bytes = json.dumps(payload_data, sort_keys=True).encode("utf-8")
     checksum = hashlib.sha256(payload_bytes).hexdigest()
-    today = date.today()
-    retention_until = today + timedelta(days=5 * 365)
+    today = datetime.now(UTC).date()
 
     log_row = SebiComplianceLogRow(
         id=str(uuid.uuid4()),
@@ -361,15 +469,11 @@ def log_upsi_access(
         payload=payload_data,
         rationale=rationale,
         disclosure_text="Internal UPSI access log per SEBI (PIT) Regulations, 2015",
-        retention_until=retention_until,
+        retention_until=retention_until(today),
         checksum=checksum,
     )
 
     if db is not None:
-        db.upsert(
-            "sebi_compliance_log",
-            [log_row.model_dump(mode="json")],
-            on_conflict="id",
-        )
+        db.insert("sebi_compliance_log", [log_row.model_dump(mode="json")])
 
     return log_row
