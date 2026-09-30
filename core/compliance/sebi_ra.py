@@ -61,20 +61,22 @@ def retention_until(start: date, years: int = RETENTION_YEARS) -> date:
     return start + relativedelta(years=years) + timedelta(days=RETENTION_MARGIN_DAYS)
 
 
-def resolve_registration_number(explicit: str | None = None) -> str:
-    """Return the SEBI RA registration number or fail loudly.
+NOT_REGISTERED_TEXT = "Not registered as a SEBI Research Analyst (personal, non-distributed use)"
 
-    Never fabricates a number: an invented registration number in an archived regulatory
-    document is worse than no report.
+
+def resolve_registration_number(explicit: str | None = None) -> str | None:
+    """Return the SEBI RA registration number if one is configured, else None.
+
+    Registration is optional. A number is never invented, and a value that is set but
+    malformed (or a known placeholder) is rejected rather than silently archived.
     """
     reg = (explicit or os.environ.get(REG_NUMBER_ENV, "")).strip().upper()
     if not reg:
-        raise ComplianceConfigError(
-            f"{REG_NUMBER_ENV} is not set; refusing to generate SEBI RA reports without it"
-        )
+        return None
     if not _REG_NUMBER_RE.match(reg) or reg in _KNOWN_PLACEHOLDER_REG_NUMBERS:
         raise ComplianceConfigError(
-            f"{REG_NUMBER_ENV} must be a real SEBI RA number of the form INH#########"
+            f"{REG_NUMBER_ENV} must be a real SEBI RA number of the form INH######### "
+            "(leave it unset if you are not registered)"
         )
     return reg
 
@@ -107,12 +109,13 @@ def build_disclosure_snapshot(
 ) -> dict[str, Any]:
     """Generates standard SEBI Research Analyst disclosure snapshot.
 
-    The registration number comes from `reg_number` or the SEBI_RA_REGISTRATION_NUMBER
-    environment variable. Ownership / conflict statements default to the standard wording and
+    The registration number is optional: it comes from `reg_number` or the
+    SEBI_RA_REGISTRATION_NUMBER environment variable, and is recorded as "not registered"
+    when absent. Ownership / conflict statements default to the standard wording and
     can be overridden via SEBI_RA_OWNERSHIP_DISCLOSURE / SEBI_RA_CONFLICT_DISCLOSURE; they are
     attestations the registrant must be able to stand behind.
     """
-    reg_number = resolve_registration_number(reg_number)
+    reg_number = resolve_registration_number(reg_number) or NOT_REGISTERED_TEXT
     disclosures = {
         "analyst_name": analyst_name,
         "sebi_registration_number": reg_number,
@@ -437,7 +440,7 @@ def archive_card_report(
 
     Raises:
         ArchiveError: if an archive for this card already exists (archives are write-once).
-        ComplianceConfigError: if the SEBI RA registration number is not configured.
+        ComplianceConfigError: if a registration number is set but malformed.
     """
     bundle = write_card_archive(card, disclosures, archive_dir, actor)
     if db is not None:

@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from core.compliance.sebi_ra import (
+    NOT_REGISTERED_TEXT,
     ArchiveError,
     ComplianceConfigError,
     archive_card_report,
@@ -213,14 +214,15 @@ def test_archive_and_upsi_with_db(
     assert mock_db.upsert.call_count == 1
 
 
-def test_registration_number_required(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SEBI_RA_REGISTRATION_NUMBER", raising=False)
-    with pytest.raises(ComplianceConfigError, match="not set"):
-        build_disclosure_snapshot("TCS", "id", "STRATEGIC")
+def test_registration_number_optional(sample_tactical_card: TradeCheckCardRow) -> None:
+    d = build_disclosure_snapshot("TCS", "id", "STRATEGIC")
+    assert d["sebi_registration_number"] == NOT_REGISTERED_TEXT
+    assert "INH" not in d["sebi_registration_number"]
+    assert NOT_REGISTERED_TEXT in render_html_report(sample_tactical_card, d)
 
 
 @pytest.mark.parametrize("bad", ["INH000099999", "INH000000000", "12345", "inhxyz"])
-def test_registration_number_rejects_placeholders(
+def test_registration_number_rejects_malformed_when_set(
     monkeypatch: pytest.MonkeyPatch, bad: str
 ) -> None:
     monkeypatch.setenv("SEBI_RA_REGISTRATION_NUMBER", bad)
@@ -230,7 +232,9 @@ def test_registration_number_rejects_placeholders(
 
 def test_registration_number_appears_in_report(
     sample_tactical_card: TradeCheckCardRow,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("SEBI_RA_REGISTRATION_NUMBER", "INH000012345")
     d = build_disclosure_snapshot("TATASTEEL", "id", "TACTICAL")
     assert d["sebi_registration_number"] == "INH000012345"
     assert "INH000012345" in render_html_report(sample_tactical_card, d)

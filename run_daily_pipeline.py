@@ -236,7 +236,7 @@ def _run_desks(report: RunReport, cfg: Config, db: DB, target_date: date) -> Non
     from core.engines.strategic_desk import StrategicDesk
     from core.engines.tactical_desk import TacticalDesk
 
-    # Fail fast, before evaluating anything, if reports could not legally be issued.
+    # Fail fast only if a registration number is set but malformed (registration is optional).
     resolve_registration_number()
 
     fno = [

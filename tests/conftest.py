@@ -13,6 +13,6 @@ def fixtures_dir():
 
 
 @pytest.fixture(autouse=True)
-def _sebi_registration_number(monkeypatch):
-    """Tests use a syntactically valid, obviously fake registration number."""
-    monkeypatch.setenv("SEBI_RA_REGISTRATION_NUMBER", "INH000012345")
+def _clean_sebi_env(monkeypatch):
+    """Tests that need a registration number set a syntactically valid fake one."""
+    monkeypatch.delenv("SEBI_RA_REGISTRATION_NUMBER", raising=False)
