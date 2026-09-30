@@ -15,7 +15,7 @@ from core.ingestion.nse_index_prices import NSEIndexPricesIngestor
 from core.ingestion.nse_universe import NSEUniverseIngestor
 from core.utils.http import NSEHttpClient, PlainHttpClient
 from core.utils.logging import configure_logging, get_logger
-from core.utils.trading_calendar import is_trading_day, last_n_trading_days
+from core.utils.trading_calendar import is_trading_day, last_n_trading_days, today_ist
 
 log = get_logger("backfill")
 
@@ -38,7 +38,7 @@ def main() -> int:
     db = DB()
     started = datetime.now(UTC)
 
-    end = date.fromisoformat(args.end_date) if args.end_date else datetime.now(UTC).date()
+    end = date.fromisoformat(args.end_date) if args.end_date else today_ist()
     all_holidays = [h.date for h in cfg.nse_holidays]
 
     if args.start_date:

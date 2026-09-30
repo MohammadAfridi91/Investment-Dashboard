@@ -10,3 +10,9 @@ sys.path.insert(0, str(ROOT))
 @pytest.fixture
 def fixtures_dir():
     return Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def _clean_sebi_env(monkeypatch):
+    """Tests that need a registration number set a syntactically valid fake one."""
+    monkeypatch.delenv("SEBI_RA_REGISTRATION_NUMBER", raising=False)

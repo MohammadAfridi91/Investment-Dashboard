@@ -38,15 +38,23 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SEBI_RA_REGISTRATION_NUMBER: ${{ secrets.SEBI_RA_REGISTRATION_NUMBER }}
+          # Passed via env (never interpolated into the script) to prevent shell injection.
+          INPUT_TARGET_DATE: ${{ inputs.target_date }}
+          INPUT_SKIP_INGESTION: ${{ inputs.skip_ingestion }}
         run: |
-          ARGS="--mode eod"
-          if [ -n "${{ inputs.target_date }}" ]; then
-            ARGS="$ARGS --date ${{ inputs.target_date }}"
+          ARGS=("--mode" "eod")
+          if [ -n "$INPUT_TARGET_DATE" ]; then
+            if ! [[ "$INPUT_TARGET_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+              echo "::error::target_date must be YYYY-MM-DD"
+              exit 2
+            fi
+            ARGS+=("--date" "$INPUT_TARGET_DATE")
           fi
-          if [ "${{ inputs.skip_ingestion }}" = "true" ]; then
-            ARGS="$ARGS --skip-ingestion"
+          if [ "$INPUT_SKIP_INGESTION" = "true" ]; then
+            ARGS+=("--skip-ingestion")
           fi
-          python run_daily_pipeline.py $ARGS
+          python run_daily_pipeline.py "${ARGS[@]}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -55,4 +63,13 @@ jobs:
             logs/
             data/errors/
           retention-days: 30
+          if-no-files-found: ignore
+      # Secondary copy only. The system of record is the compliance_report_archive table
+      # (Actions artifacts expire after at most 90 days; SEBI retention is 5+ years).
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compliance-reports-${{ github.run_id }}
+          path: data/compliance/reports/
+          retention-days: 90
           if-no-files-found: ignore

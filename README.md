@@ -25,3 +25,15 @@ No execution. No paper trading. No backtest gating.
 
 ## Compliance
 SEBI-RA personal use only. No redistribution.
+
+## Deployment notes (compliance archive)
+
+Before the next EOD run:
+
+1. Apply `migrations/008_compliance_report_archive.sql` (append-only, byte-exact report archive).
+2. Optional: if you hold a SEBI Research Analyst registration, add the GitHub Actions secret
+   `SEBI_RA_REGISTRATION_NUMBER` (format `INH#########`). Without it, reports state that no
+   registration is held. A malformed value fails the run.
+
+Pipeline run status is `SUCCESS`, `PARTIAL` (optional source or a few symbols failed; exit 0 with a
+warning annotation) or `FAILED` (prices/technicals/desks/archive failed; exit 1).

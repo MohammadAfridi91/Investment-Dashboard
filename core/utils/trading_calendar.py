@@ -1,7 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
+
+# India has no DST; a fixed offset avoids a tzdata dependency on minimal runners.
+IST = timezone(timedelta(hours=5, minutes=30), name="IST")
+
+
+def today_ist(now: datetime | None = None) -> date:
+    """Current calendar date in India (exchange time), not UTC."""
+    return (now or datetime.now(UTC)).astimezone(IST).date()
 
 
 def is_weekend(d: date) -> bool:
